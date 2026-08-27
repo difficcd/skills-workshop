@@ -1,0 +1,122 @@
+/* 무채색 + 단일 액센트 — 토큰 전체. 그대로 복붙 후 팔레트만 취향에 맞게.
+   --accent-color / --accent-rgb / --accent-contrast 는 런타임에서 덮어쓴다(theme.js). */
+
+:root {
+  /* 무채색 표면 — 다크 */
+  --bg-color: #161618;      /* 캔버스 */
+  --panel-bg: #212123;      /* 카드/패널 */
+  --text-main: #EDEDED;
+  --text-muted: #9A9A9A;
+  --border-color: #343436;
+
+  /* 단일 포인트색 */
+  --accent-color: #5E5E5E;
+  --accent-rgb: 94 94 94;   /* rgba(var(--accent-rgb), a) 용 */
+  --accent-contrast: #fff;  /* 액센트 위 글자색 — theme.js가 휘도로 계산해 덮어씀 */
+
+  /* 형태 */
+  --panel-radius: 18px;
+  --panel-padding: 1.1rem;
+  --panel-gap: 0.7rem;
+  --section-radius: 26px;
+  --section-padding: 1.75rem;
+
+  /* 프로젝트 폰트가 있으면 맨 앞에 끼워 넣는다. 시스템 스택만으로도 성립한다. */
+  --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               Helvetica, Arial, sans-serif;
+}
+
+/* ── 라이트 팔레트 ──
+   같은 값을 세 경로로 적용한다. 프로젝트가 쓰는 방식만 남기고 나머지는 지워도 된다.
+   (1) data-theme 속성  (2) .theme-light 클래스  (3) OS 설정 자동 추종 */
+:root[data-theme="light"],
+:root.theme-light {
+  --bg-color: #F6F7F9;      /* 서늘한 화이트 캔버스 */
+  --panel-bg: #FFFFFF;      /* 순백 패널 */
+  --text-main: #1A1B1F;
+  --text-muted: #61636B;
+  --border-color: #E6E8EC;  /* 얇은 헤어라인 */
+}
+
+/* 명시적 선택이 없을 때만 OS 설정을 따른다 — 선택이 있으면 위 블록이 이긴다 */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]):not(.theme-dark) {
+    --bg-color: #F6F7F9;
+    --panel-bg: #FFFFFF;
+    --text-main: #1A1B1F;
+    --text-muted: #61636B;
+    --border-color: #E6E8EC;
+  }
+}
+
+/* 테마 전환 시에만 색 트랜지션 (상시 적용하면 드래그·리스트가 끈적해짐).
+   전환 직후 320ms 뒤 클래스를 제거할 것. */
+.theme-transition, .theme-transition * {
+  transition: background-color 240ms ease, color 240ms ease, border-color 240ms ease !important;
+}
+
+body { background: var(--bg-color); color: var(--text-main); font-family: var(--font-body); }
+
+/* ── 기본 컴포넌트 ── */
+.Panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--panel-radius);
+  padding: var(--panel-padding);
+  display: flex; flex-direction: column; gap: var(--panel-gap);
+  min-width: 0;                     /* 그리드/플렉스 안에서 넘치지 않게 — 필수 */
+}
+
+.Btn {
+  background: color-mix(in srgb, var(--text-main) 7%, transparent);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 0.5rem 1.1rem;
+  border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  font-size: 0.9rem; font-weight: 600;
+  transition: background .18s ease, border-color .18s ease, transform .18s ease;
+}
+.Btn:hover {
+  background: color-mix(in srgb, var(--text-main) 14%, transparent);
+  border-color: color-mix(in srgb, var(--text-main) 22%, var(--border-color));
+}
+.Btn:active { transform: scale(0.96); }
+.Btn.primary {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-color) 88%, #fff), var(--accent-color));
+  border-color: transparent;
+  color: var(--accent-contrast);
+  box-shadow: 0 8px 20px rgba(var(--accent-rgb), 0.32);
+}
+
+/* 세그먼트 컨트롤 — <select> 대체 */
+.SegControl {
+  display: inline-flex; align-items: center; padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-main) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-main) 8%, transparent);
+}
+.SegBtn {
+  padding: 6px 12px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 850; letter-spacing: 0.6px;
+  color: var(--text-muted);
+  transition: background 160ms ease, color 160ms ease;
+}
+.SegBtn:hover { background: color-mix(in srgb, var(--text-main) 5%, transparent); color: var(--text-main); }
+.SegBtn.active { background: var(--accent-color); color: var(--accent-contrast); }
+
+/* 입력 기본 — 네이티브 장식 제거 */
+input, textarea, select {
+  font-family: inherit; color: var(--text-main);
+  background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px;
+}
+textarea { resize: none; }                       /* 리사이즈 핸들 금지 — 자동 높이로 처리 */
+
+/* 포커스 링은 액센트로 (히트 영역은 24px 이상 유지) */
+:where(button, a, input, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent-color); outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
