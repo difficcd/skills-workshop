@@ -100,6 +100,24 @@ node ~/.claude/skills/telegram-notify/scripts/reachability.mjs
 OS·`claude` CLI·스케줄러·자격증명을 보고 후보 넷을 **확실성과 오버헤드로 채점해서** 하나를 고른다.
 설치는 하지 않는다 — 고르는 건 사용자다. 기준과 근거는 [`references/reachability.md`](references/reachability.md).
 
+## 메시지로 세션 시작하기
+
+훅은 **이미 돌고 있는 세션 안에서만** 도움이 된다. 메시지가 세션을 *시작*하게 하려면 아무것도 안 돌 때
+도는 게 있어야 한다 — `bridge.mjs` 를 OS 스케줄러가 부른다.
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/bridge.mjs --install   # 설치 명령만 출력
+node ~/.claude/skills/telegram-notify/scripts/bridge.mjs --dry       # 뭘 실행할지만 확인
+```
+
+한 번 읽고, 메시지가 있으면 `claude -p` 로 실행하고, 답을 다시 보낸다. **루프가 아니다** — 한 번
+읽고 끝나므로 주기는 스케줄러가, 끄는 건 OS가 소유한다.
+
+락 파일(동시 실행 금지), 락을 잡은 뒤에야 소비, 실행 타임아웃 — 각각 실제로 문제가 되는 실패 하나씩을 막는다.
+
+> **설치 전 반드시 말할 것:** 봇에게 메시지를 보낼 수 있는 사람은 그 머신에서 에이전트를 실행시킬 수 있다.
+> 막는 건 봇 토큰뿐이다. **대신 설치해주지 말고** 명령을 건네서 끄는 스위치를 사용자가 갖게 한다.
+
 ## 자동 감지는 훅으로 — 습관이 아니라
 
 **스킬은 문서다.** 에이전트가 이미 행동할 때 무엇을 할지를 바꿀 뿐, 턴 안에서 수신함을 읽거나 보고를
@@ -167,6 +185,7 @@ skills/telegram-notify/
     ├── report.mjs            # 고정 형식 상태 보고 (기계가 절반을 채운다)
     ├── mode.mjs              # 어디로 보고할지 — 1 터미널만 / 2 둘 다 / 3 텔레그램만
     ├── stop-hook.mjs         # Stop 훅 — 수신함 자동 확인 + 모드 3 자동 보고
+    ├── bridge.mjs            # 메시지로 세션 시작 (OS 스케줄러가 호출, 루프 아님)
     ├── tg-read.mjs           # 사용자가 보낸 메시지를 온디맨드로 읽기 (루프 아님)
     ├── reachability.mjs      # 세션 밖에서 닿을 수 있나 — 환경 탐지 (설치는 안 함)
     ├── tg.mjs                # 임의 메시지 전송

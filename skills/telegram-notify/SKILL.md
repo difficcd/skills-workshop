@@ -167,6 +167,36 @@ already waiting.
 
 Any failure prints nothing and exits 0 — a broken notifier must never be able to trap a session.
 
+### "Message the bot and have a session start"
+
+The hook above only helps **inside a session that is already running**. Making a message *start*
+one needs something that runs when nothing else does — `bridge.mjs`, called by an OS scheduler.
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/bridge.mjs --install   # prints the command; installs nothing
+node ~/.claude/skills/telegram-notify/scripts/bridge.mjs --dry       # what it would run
+```
+
+One poll: read the inbox, and if anything arrived, run `claude -p` on it and send the answer back.
+**It is not a loop** — it reads once and exits, so the scheduler owns the cadence and the OS owns
+the off switch. That is the difference from the detached shell loop that once kept sending for
+hours after its script was deleted.
+
+Guards, each for a failure that actually matters:
+
+- **A lock file**, so a two-minute schedule cannot start a second agent on the same repo while the
+  first is working. It carries a pid and a time, so a crashed run cannot block forever
+- **Messages are consumed only once the lock is held**, so a refused poll leaves them for the next
+- **A run timeout**, so one hung agent does not wedge every later poll
+- Every failure is logged and swallowed; a bridge that can trap the machine is worse than one that
+  misses a message
+
+**Say this to the user before they install it:** anyone who can message the bot can make an agent
+run on that machine, and the bot token is the only thing in the way. Do not install it where that
+trade is not acceptable, and revoke the token with @BotFather if it ever leaks. **Do not install
+it for them** — hand over the command so they own the off switch, and give them the stop line in
+the same breath.
+
 ### "Make it work after the session ends"
 
 The default is that nothing runs between sessions. Whether that can change **depends on the
