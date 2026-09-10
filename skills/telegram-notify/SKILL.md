@@ -172,10 +172,20 @@ Any failure prints nothing and exits 0 — a broken notifier must never be able 
 The hook above only helps **inside a session that is already running**. Making a message *start*
 one needs something that runs when nothing else does — `bridge.mjs`, called by an OS scheduler.
 
+**It competes with the Stop hook, and it wins.** Both consume the same `getUpdates` offset, so a
+few-minute schedule takes the messages a hook firing at the end of a turn would have delivered
+into the live session. Treat the two as mutually exclusive — Stop hook while the user sits at a
+session, bridge while they are away. What the user reports when it happens, and the one-line off
+switch, are in [`references/reachability.md`](references/reachability.md).
+
 ```bash
 node ~/.claude/skills/telegram-notify/scripts/bridge.mjs --install   # prints the command; installs nothing
 node ~/.claude/skills/telegram-notify/scripts/bridge.mjs --dry       # what it would run
 ```
+
+On Windows `scripts/install-bridge.ps1` is the ready-made task installer: `-WorkDir` picks the
+directory it answers from, and it refuses to install over a wired Stop hook unless given `-Force`.
+Hand it over; do not run it for them.
 
 One poll: read the inbox, and if anything arrived, run `claude -p` on it and send the answer back.
 **It is not a loop** — it reads once and exits, so the scheduler owns the cadence and the OS owns

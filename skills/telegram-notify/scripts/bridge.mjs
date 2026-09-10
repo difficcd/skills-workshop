@@ -15,6 +15,15 @@
 // owns the off switch. That is the difference from the detached shell loop that once kept sending
 // for hours after its script was deleted.
 //
+// CONFLICT - it competes with the Stop hook, and it wins. `getUpdates` acknowledges with an
+// offset that belongs to the bot, not to the reader, so whichever of the two polls first consumes
+// the message and the other never sees it. A few-minute schedule beats a hook that only fires at
+// the end of a turn, so with both installed a message sent mid-turn is answered *here*, headless,
+// in whatever directory the scheduler was pointed at - and the session the user is watching never
+// continues. They report that as "Telegram stopped reaching my session". Treat the two as mutually
+// exclusive: Stop hook while they sit at a session, this while they are away.
+// See references/reachability.md.
+//
 // SECURITY - say this to the user before installing it. Anyone who can message the bot can make
 // an agent run on this machine. The bot token is the only thing in the way. Do not install it on
 // a machine where that is not an acceptable trade, and revoke the token with @BotFather if it

@@ -64,6 +64,36 @@ crontab -l | grep claude-telegram                 # cron
 - **Hand the user the stop command right there.** Automation nobody knows how to turn off was the
   real failure last time
 
+### The bridge and a live session compete for the same inbox
+
+**This is the one that gets reported as "Telegram stopped reaching my session."**
+
+`getUpdates` acknowledges with an **offset that belongs to the bot, not to the reader**. Both
+`bridge.mjs` and `stop-hook.mjs` read the inbox and then re-read it at `last + 1` to consume what
+they handled. So the first one to poll takes the message and the other never sees it.
+
+They do not poll on comparable schedules:
+
+| | when it polls | how often it wins |
+|---|---|---|
+| scheduled bridge | every N minutes, unconditionally | almost always |
+| `Stop` hook | only when a turn ends | only when no tick fell inside the turn |
+
+With both installed, a message sent while the agent is mid-turn is answered by a **headless run in
+whatever directory the scheduler was pointed at**, and the session the user is watching never
+continues. From the outside that is indistinguishable from the channel being broken, which is why
+it arrives as a bug report and not as a conflict.
+
+**They are mutually exclusive, and which one is right depends on where the user is:**
+
+- **at a live session** — Stop hook only. The message lands in that session as a `decision: block`
+  and the turn keeps going instead of ending. Turn the task off:
+  `Disable-ScheduledTask -TaskName 'claude-telegram'`
+- **away, nothing open** — bridge only. Nothing else can answer
+
+`install-bridge.ps1` refuses to install over a wired Stop hook for exactly this reason and prints
+the choice instead; `-Force` overrides. `Enable-ScheduledTask` puts it back when leaving the desk.
+
 ### cloud-routine — certain but expensive
 
 A cloud routine made with `RemoteTrigger` runs whether or not this machine is on. But polling
