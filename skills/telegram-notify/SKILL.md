@@ -141,6 +141,32 @@ unconsumed and it will still be there next time — reading and acting are separ
 > send waits quietly until the agent goes to read it. Unsaid, it reads as "the integration is
 > broken" — which is exactly how it was read.
 
+### Automatic detection — a hook, not a habit
+
+**A skill is a document.** It changes what the agent does once it is already acting; nothing in a
+turn reads the inbox or sends a report by itself. That is why P0-6 kept being broken and why
+messages sat unread: both depended on the agent remembering.
+
+A **hook** is executed by the harness, so neither does any more. Wire `stop-hook.mjs` to `Stop`:
+
+```json
+{ "hooks": { "Stop": [{ "hooks": [{ "type": "command",
+  "command": "node ~/.claude/skills/telegram-notify/scripts/stop-hook.mjs", "timeout": 30 }] }] } }
+```
+
+At every stop it reads the inbox, sends the report **in mode 3**, and — if anything arrived —
+returns `decision: block` with the messages, so the turn **continues and answers** instead of
+ending on something never seen. It cannot loop: the messages are consumed before the block, so
+the next stop finds an empty inbox.
+
+Mode 2 deliberately does **not** auto-report: the terminal already reached them, and a message on
+every turn end is the noise P0-1 exists to prevent. There, P0-6 stays a judgement call.
+
+Optionally on `SessionStart`, `tg-read.mjs` (without `--consume`) starts a session knowing what is
+already waiting.
+
+Any failure prints nothing and exits 0 — a broken notifier must never be able to trap a session.
+
 ### "Make it work after the session ends"
 
 The default is that nothing runs between sessions. Whether that can change **depends on the

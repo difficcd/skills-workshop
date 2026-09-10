@@ -100,6 +100,26 @@ node ~/.claude/skills/telegram-notify/scripts/reachability.mjs
 OS·`claude` CLI·스케줄러·자격증명을 보고 후보 넷을 **확실성과 오버헤드로 채점해서** 하나를 고른다.
 설치는 하지 않는다 — 고르는 건 사용자다. 기준과 근거는 [`references/reachability.md`](references/reachability.md).
 
+## 자동 감지는 훅으로 — 습관이 아니라
+
+**스킬은 문서다.** 에이전트가 이미 행동할 때 무엇을 할지를 바꿀 뿐, 턴 안에서 수신함을 읽거나 보고를
+보내는 건 아무것도 없다. 그래서 "멈출 때 보내라"는 규칙이 계속 깨졌고 메시지도 안 읽혔다 — 둘 다
+에이전트의 기억력에 달려 있었기 때문이다.
+
+**훅은 하네스가 실행한다.** `Stop` 에 연결하면:
+
+```json
+{ "hooks": { "Stop": [{ "hooks": [{ "type": "command",
+  "command": "node ~/.claude/skills/telegram-notify/scripts/stop-hook.mjs", "timeout": 30 }] }] } }
+```
+
+매번 멈출 때 수신함을 읽고, **모드 3이면** 보고를 보내고, 새 메시지가 있으면 `decision: block` 으로
+돌려줘서 **턴이 끝나지 않고 답하게** 만든다. 무한루프는 불가능하다 — block 전에 메시지를 소비하므로
+다음 stop에서는 수신함이 비어 있다.
+
+모드 2는 일부러 자동 보고를 **안 한다.** 터미널이 이미 닿았고, 매 턴 끝마다 메시지를 보내는 것이
+P0-1이 막으려는 그 소음이다.
+
 ## 모드 — 어디로 보고할까
 
 사용자가 **지금 어디에 있느냐**의 문제지 작업의 문제가 아니다.
@@ -146,6 +166,7 @@ skills/telegram-notify/
 └── scripts/                  # Node 18+, 의존성 없음
     ├── report.mjs            # 고정 형식 상태 보고 (기계가 절반을 채운다)
     ├── mode.mjs              # 어디로 보고할지 — 1 터미널만 / 2 둘 다 / 3 텔레그램만
+    ├── stop-hook.mjs         # Stop 훅 — 수신함 자동 확인 + 모드 3 자동 보고
     ├── tg-read.mjs           # 사용자가 보낸 메시지를 온디맨드로 읽기 (루프 아님)
     ├── reachability.mjs      # 세션 밖에서 닿을 수 있나 — 환경 탐지 (설치는 안 함)
     ├── tg.mjs                # 임의 메시지 전송

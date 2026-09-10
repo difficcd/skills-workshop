@@ -83,7 +83,11 @@ const clock = (d = new Date()) => `${String(d.getHours()).padStart(2, '0')}:${St
 export function format({ now, done, next, blocked, note }, ctx = context(), at = new Date(), L = LABELS[lang()]) {
     // The one glyph that changes: a blocked report has to be distinguishable at a glance, from
     // the notification preview alone, without opening anything.
-    const head = `${blocked ? '🔴' : '🟢'} ${ctx.project || 'session'} · ${clock(at)}`;
+    //
+    // The mode is in the header because the reader cannot otherwise tell which one is in force,
+    // and it changes what this message means: in mode 3 it is the whole account of the work, in
+    // mode 2 it is a summary of something also on screen. Mode 1 never sends, so it never shows.
+    const head = `${blocked ? '🔴' : '🟢'} ${ctx.project || 'session'} · m${mode().id} · ${clock(at)}`;
     const lines = [head];
     if (now) lines.push(`${L.now}: ${now}`);
     if (done) lines.push(`${L.done}: ${done}`);
