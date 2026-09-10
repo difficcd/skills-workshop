@@ -100,6 +100,23 @@ node ~/.claude/skills/telegram-notify/scripts/reachability.mjs
 OS·`claude` CLI·스케줄러·자격증명을 보고 후보 넷을 **확실성과 오버헤드로 채점해서** 하나를 고른다.
 설치는 하지 않는다 — 고르는 건 사용자다. 기준과 근거는 [`references/reachability.md`](references/reachability.md).
 
+## 모드 — 어디로 보고할까
+
+사용자가 **지금 어디에 있느냐**의 문제지 작업의 문제가 아니다.
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/mode.mjs      # 현재 모드
+node ~/.claude/skills/telegram-notify/scripts/mode.mjs 2    # 설정
+```
+
+| 모드 | 터미널 | 텔레그램 | 언제 |
+|---|---|---|---|
+| **1** | 전부 | **안 보냄** | 자리에 있음. 화면에 이미 있는 걸 또 울릴 이유가 없다 |
+| **2** | 전부 | 중요한 순간에만 | 기본값. 있지만 잠깐 나갈 수 있음 |
+| **3** | **짧게** | 전부 | 나가 있음. 터미널은 줄여 토큰을 아끼고, 보고는 메시지로 |
+
+모드 1에서는 `tg.mjs` 와 `report.mjs` 가 **보낼 내용을 출력만 하고 종료**한다. 잃는 것도 없고 울리지도 않는다.
+
 ## 쓰기
 
 ```bash
@@ -128,6 +145,7 @@ skills/telegram-notify/
 │   └── reachability.md       # 세션이 끝난 뒤에도 닿게 하기 — 후보 4개와 고르는 기준
 └── scripts/                  # Node 18+, 의존성 없음
     ├── report.mjs            # 고정 형식 상태 보고 (기계가 절반을 채운다)
+    ├── mode.mjs              # 어디로 보고할지 — 1 터미널만 / 2 둘 다 / 3 텔레그램만
     ├── tg-read.mjs           # 사용자가 보낸 메시지를 온디맨드로 읽기 (루프 아님)
     ├── reachability.mjs      # 세션 밖에서 닿을 수 있나 — 환경 탐지 (설치는 안 함)
     ├── tg.mjs                # 임의 메시지 전송

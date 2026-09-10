@@ -21,6 +21,7 @@ noise. Half of this skill is how to send; the other half is how not to.
 | 0-3 | **Never print a token or chat id verbatim.** Use the masked output when confirming | It survives in transcripts, logs and screenshots |
 | 0-4 | **Read it as the user before sending.** No progress narration, no self-reporting | See "When to send" |
 | 0-5 | If the user says stop, **kill the processes too** | See the box below |
+| 0-6 | **Never end a turn on "I will keep going" without sending** (modes 2 and 3). Stopping is the one occasion that matters most | This was violated: a turn ended with "I will carry on extracting the pure pieces", then stopped. Nothing arrived. From the outside that is indistinguishable from a crash |
 
 ### Deleting the file does not stop it
 
@@ -46,6 +47,31 @@ Get-ScheduledTask | Where-Object { $_.TaskName -match 'telegram|tg' }   # must p
 If the agent harness has background tasks or scheduling, that is a second source. Check it too.
 
 ---
+
+## Mode — ask once, then obey it
+
+The user picks where reporting goes. It is a property of where **they** are, not of the work.
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/mode.mjs        # what is set
+node ~/.claude/skills/telegram-notify/scripts/mode.mjs 2      # set it
+```
+
+| mode | terminal | telegram | when |
+|---|---|---|---|
+| **1** | full | **never** | the user is at the desk. A message would duplicate what they can already see |
+| **2** | full | at the moments that matter | the default. They are here but may step away |
+| **3** | **terse** | everything | they are away. Keep the terminal short to save tokens; the message is the report |
+
+`tg.mjs` and `report.mjs` both check it: in mode 1 they print what would have gone and exit `0`,
+so nothing is lost and no send happens. `TG_MODE=3` overrides for a single command.
+
+**In mode 3 the terminal answer stays short** — a few lines, no long summaries, no repeated tables.
+That is the point of the mode: the tokens go into the work, and the account of it goes by message.
+
+**In modes 2 and 3, a stop is a send.** See P0-6. Before ending a turn, ask: did work stop here?
+Finished, blocked, waiting, or "I will carry on next turn"? Then send, and send *before* writing
+the closing message so a stop cannot slip out unannounced.
 
 ## When to send — three occasions, no others
 
