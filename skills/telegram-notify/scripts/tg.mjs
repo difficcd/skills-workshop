@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { mode, canSend } from './mode.mjs';
 
 export const ENV_FILE = process.env.TG_ENV_FILE || join(homedir(), '.claude', 'local', 'telegram.env');
 
@@ -93,6 +94,13 @@ const readStdin = (ms = 1500) => new Promise((resolve) => {
 
 // Only when this file is what was run, so the functions above can be imported and tested.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+    // Mode 1 means the user is at the desk: the terminal already reached them and a buzz would
+    // be a duplicate. Print what would have gone, so nothing is lost, and succeed.
+    if (!canSend()) {
+        console.log(`[mode ${mode().id}] not sent:`);
+        console.log((process.argv.slice(2).join(' ') || await readStdin()).trim());
+        process.exit(0);
+    }
     const creds = credentials();
     if (!creds.token || !creds.chat) {
         console.error('telegram is not set up on this machine.');

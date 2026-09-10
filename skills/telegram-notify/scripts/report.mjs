@@ -20,6 +20,7 @@
 import { execFileSync } from 'node:child_process';
 import { basename } from 'node:path';
 import { credentials, send } from './tg.mjs';
+import { mode, canSend } from './mode.mjs';
 
 const flag = (name) => {
     const i = process.argv.indexOf(`--${name}`);
@@ -110,6 +111,10 @@ if (process.argv[1] && import.meta.url === (await import('node:url')).pathToFile
     });
 
     if (has('dry')) { console.log(text); process.exit(0); }
+
+    // Same rule as tg.mjs: mode 1 prints instead of sending. The report is still built, so the
+    // machine-read line is in the terminal too and the agent has not skipped the discipline.
+    if (!canSend()) { console.log(`[mode ${mode().id}] not sent:`); console.log(text); process.exit(0); }
 
     const creds = credentials();
     if (!creds.token || !creds.chat) {

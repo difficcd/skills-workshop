@@ -95,6 +95,15 @@ have done something hard to undo, or are about to.
 moving to the next step without knowing that is the most expensive failure an unsupervised loop
 has.
 
+## Modes
+
+`mode.mjs` decides whether this is sent at all. In mode 1 the report is still **built** — the
+machine-read line goes to the terminal — but nothing is sent. The discipline is the same in every
+mode; only the destination changes.
+
+In **mode 3** the terminal reply stays terse and this message carries the account. That makes
+`--done` and `--next` do more work: they are the only record the user gets.
+
 ## When
 
 The three occasions in SKILL.md. **Work stopping** is what this shape was made for — finished,
