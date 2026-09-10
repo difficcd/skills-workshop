@@ -1,0 +1,92 @@
+# engineering-guardrails
+
+**나중에 대규모 리팩토링을 하게 만드는 구조적 부채를 애초에 안 쌓기 위한 규칙.**
+
+> A Claude Code skill of engineering rules distilled from actually refactoring a 4,300-line React
+> component down. What cost real time was never the length — it was duplicated logic, failures
+> that succeeded silently, and rules nobody checked. Every rule here came from something that
+> actually broke, and most carry a runnable check.
+> Korean content; the rules are language-independent.
+
+---
+
+## 왜
+
+4,300줄짜리 React 컴포넌트를 뜯어내면서 나온 것들이다. 값비쌌던 것은 **길이가 아니었다.**
+
+- **같은 로직의 사본** — 진짜 버그는 전부 사본을 합치다 나왔다. 타임라인 여백 계산 7벌에서 죽은 휠 줌이,
+  "이 비트맵 디코드됐나" 3벌에서 빈 레이어를 캐시할 수 있는 경로가 나왔다
+- **조용히 성공하는 실패** — 붙여넣기가 에러 없이 증발했다. `patchLayer` 가 id를 못 찾으면 그냥
+  원본을 돌려줬기 때문이다
+- **아무도 확인하지 않는 규칙** — 죽은 import가 33개 쌓여 있었다. 아무것도 안 망가뜨려서 안 보였다
+
+## 핵심 한 가지: 이음매 비용
+
+**가장 큰 함수가 가장 좋은 이음매인 경우는 드물다.** 어떤 묶음을 뺄 수 있는지는 크기가 아니라
+**자기 것이 아닌 이름을 몇 개 읽는가**로 정해지고, 그건 눈으로 못 센다.
+
+```bash
+node ~/.claude/skills/engineering-guardrails/scripts/seams.mjs src/App.jsx --group tool,setTool,color,brushSize
+```
+
+같은 파일에서 실측한 값:
+
+| 묶음 | 이름 | 줄 | **읽는 수** | 결론 |
+|---|---|---|---|---|
+| 그리기 | 35 | 598 | **53** | 못 뺌 — 그리기는 원래 전부에 닿는다 |
+| 비트맵 캐시 | 23 | 298 | 19 | 어려움 |
+| 도구 설정 | 28 | 42 | **4** | 뺐음 |
+| 음원 트랙 | 11 | 86 | **4** | 뺐음 |
+
+가장 큰 덩어리가 못 나가고, 그 덩어리가 **읽는** 쪽이 나갔다. 그러면 그리기 코드는 그대로인데
+파일에서 이름이 28개 줄어든다.
+
+## 설치
+
+```bash
+cp -r skills/engineering-guardrails ~/.claude/skills/
+```
+
+```powershell
+Copy-Item -Recurse skills\engineering-guardrails "$env:USERPROFILE\.claude\skills\"
+```
+
+Node 18+, 의존성 0.
+
+## 구조
+
+```
+skills/engineering-guardrails/
+├── SKILL.md                    # P0(부채를 만드는 것) → P1(어디에 둘까) → P2(테스트) → P3(상시 검사)
+├── references/
+│   ├── decisions.md            # 값을 치른 결정들 — 조용한 실패 목록, 파생 vs 저장, 리듀서·훅은 언제
+│   └── checks.md               # 검사를 붙이는 법, 기준선, 검사 자체를 검증하는 법
+└── scripts/
+    ├── seams.mjs               # 이음매 비용 측정 — 어디를 자를 수 있나
+    └── unused-imports.mjs      # 죽은 import (중복 import 포함 — 둘 다 "쓰여서" 안 잡히는 것)
+```
+
+## P0 다섯 줄
+
+| # | |
+|---|---|
+| 0-1 | 같은 로직을 **두 번** 쓰게 되면 그 자리에서 뽑는다 |
+| 0-2 | **조용히 아무것도 안 하는 경로**를 만들지 않는다. 못 하면 말하거나, 막거나, 던진다 |
+| 0-3 | **거울**을 만들지 않는다. 같은 사실을 두 곳에 두지 말고 파생시킨다 |
+| 0-4 | 규칙에는 **실행 가능한 검사**를 붙인다 |
+| 0-5 | **왜인지를 숫자 옆에** 적는다 |
+
+0-5의 실제 사례: `DECODED_CAP = 120; // 프리페치 윈도보다 커야 함`. 가장 중요한 성질이 줄 끝
+주석이었다. 어기면 축출과 프리페치가 서로 싸우고 **메모리 문제가 아니라 끊김으로 보인다.**
+지금은 테스트다.
+
+## 테스트에 대한 한 가지
+
+**실패할 수 있는지 확인한다.** 함수를 자기 자신의 인라인 버전과 비교하는 테스트를 두 개 짠 적이
+있다. 절대 실패할 수 없었고, 통과하는 것을 보고 검증됐다고 착각했다.
+
+붙인 뒤 일부러 깨뜨려 보고, 그 테스트가 잡는지 본다. 안 잡으면 그건 테스트가 아니다.
+
+## 라이선스
+
+[MIT](../../LICENSE)

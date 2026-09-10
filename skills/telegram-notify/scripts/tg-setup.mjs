@@ -100,7 +100,7 @@ async function setup(token, chatArg) {
 
     // Prove it end to end. A setup that "succeeded" and cannot send is exactly the failure this
     // step exists to catch - the user would otherwise find out by not hearing anything.
-    const r = await send(`연동 완료 — @${bot} 에서 보냅니다. 이 채널은 손으로 보낼 때만 씁니다.`, { token, chat });
+    const r = await send(`Connected. Messages come from @${bot}. This channel is only ever sent down by hand.`, { token, chat });
     if (!r.ok) {
         console.error(`saved, but the test message failed: ${r.status}`);
         console.error(scrub(r.body));

@@ -1,102 +1,105 @@
-# 세션이 끝난 뒤에도 닿게 하기
+# Being reachable after the session ends
 
-사용자가 묻는 형태는 대개 이것이다:
+The user usually asks it as: *"it used to answer even after the session ended — why not now?"*
 
-> 저번에는 세션이 끝나도 내가 텔레그램 보내면 연결이 됐었는데 왜 지금은 안 되냐?
+**Give them the fact first.** By default this channel does nothing outside a session. Messages
+they sent are still sitting in `getUpdates` and are not lost — only immediacy is. What used to
+work was almost certainly a **background shell loop**, which is exactly what P0-1 bans (and what
+kept sending for hours after its script was deleted).
 
-**먼저 사실부터 말한다.** 기본 상태에서 이 채널은 세션 밖에서 아무것도 하지 않는다. 보낸 메시지는
-`getUpdates`에 그대로 쌓여 있고 잃지 않는다 — 잃는 것은 즉시성뿐이다. 예전에 되던 것은 대개
-**백그라운드 셸 루프**가 돌고 있었기 때문이고, 그건 P0-1이 금지하는 바로 그 구조다(그리고 스크립트를
-지운 뒤에도 몇 시간 더 메시지를 보낸 그 사건의 원인이다).
-
-그 다음에 고칠 수 있는지를 본다. **환경마다 답이 다르므로 추측하지 말고 탐지한다.**
+Then find out whether it can be fixed. **The answer differs per machine, so probe rather than
+guess:**
 
 ```bash
 node ~/.claude/skills/telegram-notify/scripts/reachability.mjs
 ```
 
-설치는 하지 않는다. 무엇이 가능한지만 찍는다.
+It installs nothing. It only prints what is possible.
 
 ---
 
-## 판단 기준
+## The criteria
 
-사용자가 준 규칙, 그대로 쓴다:
+**Low overhead AND certain.** Both must hold. Slightly cheaper but unproven is a no; certain but
+too heavy is also a no. Failing either is a **rejection**, not a compromise.
 
-> 오버헤드가 적고 확실한 방법으로. 오버헤드가 살짝 있어도 **확실하지 않으면 선택하지 마.**
-> **확실해도 오버헤드가 너무 커도 선택하지 마.**
+If nothing passes, stay on `in-session-only` and **say why**. That is the honest default.
 
-둘 다 성립해야 한다. 하나라도 어기면 절충이 아니라 **탈락**이다.
-아무것도 통과하지 못하면 `in-session-only`로 두고 **왜 그런지 말한다.** 그것이 정직한 기본값이다.
+## The four candidates
 
-## 후보 넷
-
-| | 확실 | 오버헤드 | 언제 고르나 |
+| | certain | overhead | when to pick it |
 |---|---|---|---|
-| **os-scheduler** | 스케줄러 + `claude` CLI + 자격증명이 다 있을 때 | 유휴 시 거의 0 — 틱당 HTTPS 한 번, 메시지 없으면 아무것도 안 뜸 | 대개 이것 |
-| **cloud-routine** | 항상 (머신이 꺼져 있어도 됨) | **높음** — 틱마다 클라우드 세션 하나, 대부분 허탕 | 머신이 꺼져 있어도 반드시 받아야 할 때만 |
-| **push-webhook** | 아직 아님 | 0 — 메시지가 있을 때만 | URL 훅을 세션이 발급할 수 있음이 확인되면 |
-| **in-session-only** | 항상 | 없음 | 위가 다 탈락일 때. 현재 기본값 |
+| **os-scheduler** | when scheduler + `claude` CLI + credentials are all present | near zero while idle — one HTTPS call per tick, nothing spawned unless a message exists | usually this one |
+| **cloud-routine** | always (works with the machine off) | **high** — every tick is a full cloud session, most finding nothing | only when messages must land with the machine off |
+| **push-webhook** | not yet | zero — nothing runs until a message arrives | once URL-hook minting is confirmed |
+| **in-session-only** | always | none | when the rest are out. The current default |
 
-### os-scheduler — 대개 정답
+### os-scheduler — usually the answer
 
-OS 스케줄러가 짧은 폴을 돌리고, **메시지가 있을 때만** 헤드리스 에이전트를 띄운다.
-유휴 상태에서 드는 건 HTTPS 호출 한 번뿐이라 사실상 공짜고, 메시지가 있을 때만 값을 치른다.
+An OS scheduler runs a short poll and starts a headless agent run **only when a message exists**.
+Idle cost is one HTTPS call; you pay only when there is something to pay for.
 
-**예전 사고와 무엇이 다른가.** 그때 문제는 폴링이라는 개념이 아니라 **detach된 셸 루프**였다 —
-목록에 안 잡히고, 이름으로 못 죽이고, 조용히 여러 개로 늘어났다. **이름 붙은 예약 작업**은 셋 다 아니다:
+**How this differs from the incident.** The problem then was not polling — it was a **detached
+shell loop**: unlisted, unkillable by name, silently multiplying. A *named* scheduled task is none
+of those:
 
 ```powershell
-Get-ScheduledTask -TaskName 'claude-telegram'          # 있는지
-Disable-ScheduledTask -TaskName 'claude-telegram'      # 끄기 (한 줄)
-Unregister-ScheduledTask -TaskName 'claude-telegram'   # 지우기
+Get-ScheduledTask -TaskName 'claude-telegram'          # is it there
+Disable-ScheduledTask -TaskName 'claude-telegram'      # off, one line
+Unregister-ScheduledTask -TaskName 'claude-telegram'   # gone
 ```
 
 ```bash
-launchctl list | grep claude-telegram     # macOS
-systemctl --user status claude-telegram.timer   # Linux
-crontab -l | grep claude-telegram         # cron
+launchctl list | grep claude-telegram             # macOS
+systemctl --user status claude-telegram.timer     # Linux
+crontab -l | grep claude-telegram                 # cron
 ```
 
-**만들 때 반드시 지킬 것:**
+**Non-negotiable when building one:**
 
-- **이름을 고정한다** (`claude-telegram`). 이름이 있어야 위 명령들이 성립한다
-- **중복 실행 금지** 옵션을 켠다. 겹쳐 도는 순간 예전 사고의 재현이다
-- 폴은 **읽기만** 하고, 처리한 것은 `--consume` 으로 소비한다. 안 그러면 같은 지시를 반복 실행한다
-- 끄는 방법을 **사용자에게 그 자리에서 알려준다.** 끄는 법을 모르는 자동화가 그때의 진짜 실패였다
+- **Fix the name** (`claude-telegram`). Without a name none of the commands above work
+- **Forbid overlapping runs.** The moment two overlap you have recreated the incident
+- The poll **only reads**, and consumes what it handled with `--consume`. Otherwise the same
+  instruction runs again on the next tick
+- **Hand the user the stop command right there.** Automation nobody knows how to turn off was the
+  real failure last time
 
-### cloud-routine — 확실하지만 비싸다
+### cloud-routine — certain but expensive
 
-`RemoteTrigger`로 만드는 클라우드 루틴은 이 머신이 꺼져 있어도 돈다. 다만 몇 분마다 폴링하면
-하루 수백 번 실행되고 대부분 아무것도 못 찾는다. **"확실해도 오버헤드가 너무 커도"에 정확히 걸린다.**
+A cloud routine made with `RemoteTrigger` runs whether or not this machine is on. But polling
+every few minutes is hundreds of runs a day, nearly all finding nothing. That is precisely the
+certain-but-too-expensive case.
 
-머신이 꺼져 있는 동안에도 반드시 받아야 하는 경우에만, 그리고 **간격을 넉넉히 잡아** 쓴다.
+Use it only when messages must be caught while the machine is off, and with a **generous
+interval**.
 
-### push-webhook — 모양은 맞는데 아직 못 만든다
+### push-webhook — right shape, cannot be built yet
 
-텔레그램 `setWebhook`이 루틴 URL로 직접 POST하면 메시지가 있을 때만 깨어난다. 오버헤드 0.
-`hook_type`에 `url`이 실제로 존재한다:
+Telegram's `setWebhook` posting straight at a routine URL would wake only when a message exists.
+Zero overhead. The hook type genuinely exists:
 
 ```
 hook_type: must be in list [app, url]
 ```
 
-그런데 만들려고 하면:
+But creating one:
 
 ```
 hook_type=url triggers are minted by the bound session, not created through this API
 ```
 
-**세션이 발급하는 것이라 triggers API로는 안 된다.** 규칙상 확실하지 않으므로 탈락이다.
-나중에 발급 경로가 확인되면 이게 최선이 된다 — 그때 이 문서를 고친다.
+**Minted by a session, not creatable through the triggers API.** Not certain, therefore rejected.
+If that minting path is confirmed later this becomes the best option — update this file then.
 
-### in-session-only — 현재 기본값
+### in-session-only — the current default
 
-세션 밖에서 아무것도 돌지 않는다. `getUpdates`는 스트림이 아니라 **우편함**이라 늦게 읽어도 잃지 않는다.
+Nothing runs between sessions. `getUpdates` is a **mailbox, not a stream**, so reading late loses
+nothing.
 
-## 사용자에게 어떻게 말하나
+## How to tell the user
 
-1. **왜 지금은 안 되는지** 사실로 답한다 — 예전엔 백그라운드 루프가 있었고, 그게 사고를 냈고, 그래서 없앴다
-2. 탐지 결과를 보여주고 **고르게 한다.** 환경이 다르면 답도 다르다
-3. 만들기로 하면 **끄는 명령을 같이 준다.** 예외 없이
-4. 아무것도 통과 못 하면 그렇게 말한다. 확실하지 않은 것을 확실한 척 붙이지 않는다
+1. **Answer why it does not work now**, factually — there used to be a background loop, it caused
+   an incident, it was removed
+2. Show the probe result and **let them choose**. Different machine, different answer
+3. If they build one, **give them the stop command**. Every time, no exceptions
+4. If nothing passes, say so. Do not attach something uncertain and present it as certain

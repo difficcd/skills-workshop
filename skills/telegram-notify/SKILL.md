@@ -1,37 +1,38 @@
 ---
 name: telegram-notify
-description: 텔레그램으로 사용자에게 메시지를 보내거나, 새 머신·새 프로젝트에서 텔레그램 연동을 처음 설정한다. LOAD WHEN — "텔레그램 연동해줘", "텔레그램으로 보내줘", "브리핑 보내", "알림 보내", 오래 걸리는 작업이 끝났을 때, 막혀서 사용자 답을 기다려야 할 때, 봇 토큰·chat id 설정이 필요할 때. DO NOT LOAD — 주기적 상태 보고·하트비트를 만들려는 경우(P0 위반), 다른 메신저 연동, 텔레그램 봇 자체를 개발하는 작업.
+description: Send the user a Telegram message, read what they sent back, or set the link up on a new machine. LOAD WHEN — the user asks to be messaged, briefed or notified; a long task finishes; you are blocked and need their answer; the user asks whether Telegram is connected or why it is not answering; a bot token or chat id needs configuring. DO NOT LOAD — building a periodic status report or heartbeat (a P0 violation), another messenger, or developing a Telegram bot itself.
 ---
 
-# 텔레그램 알림
+# Telegram notify
 
-한 줄: **손으로 한 번씩 보내는 채널.** 하트비트도, 폴러도, 크론도, 훅도 만들지 않는다.
+One line: **a channel you send down by hand.** No heartbeat, no poller, no cron, no hook.
 
-에이전트가 자리를 비운 사용자에게 닿는 유일한 통로이자, 가장 쉽게 소음이 되는 통로다.
-이 스킬의 절반은 **보내는 법**이고 나머지 절반은 **안 보내는 법**이다.
+It is the only way an agent reaches a user who has walked away, and the easiest way to become
+noise. Half of this skill is how to send; the other half is how not to.
 
 ---
 
-## P0 — 위반 금지
+## P0 — never
 
-| # | 규칙 | 이유 |
+| # | Rule | Why |
 |---|---|---|
-| 0-1 | **자동·주기 전송을 만들지 않는다.** heartbeat/poll 스크립트, cron, 스케줄러, 전송하는 hook, 반복 감시 태스크 — 전부 금지. 금지 대상은 **뒤에서 계속 도는 루프**이지, 에이전트가 한 번 부르는 명령이 아니다 (`tg-read.mjs`는 허용) | N분마다 오는 "지금 X 하는 중"은 정보가 아니라 소음이다. 한 번 만들면 사용자가 직접 꺼야 한다 |
-| 0-2 | **토큰을 저장소 안에 두지 않는다.** 자격증명은 `~/.claude/local/telegram.env` 한 곳 | 커밋되면 봇이 탈취된다. 이 파일은 어느 repo에도 속하지 않는다 |
-| 0-3 | 토큰·chat id를 **대화에 원문으로 출력하지 않는다.** 확인이 필요하면 마스킹된 출력을 쓴다 | 전사(transcript)·로그·스크린샷에 남는다 |
-| 0-4 | **보내기 전에 사용자 입장에서 읽어본다.** 진행 중계·자기 보고 금지 | 아래 "언제 보내나" |
-| 0-5 | 사용자가 "그만 보내"라고 하면 **프로세스까지 죽인다** | 아래 상자 |
+| 0-1 | **Never build automatic or periodic sending.** No heartbeat or poll script, cron, scheduler, sending hook, or repeating watch task. What is banned is a **loop running in the background**, not a command the agent invokes once (`tg-read.mjs` is fine) | "Working on X" every N minutes is not information, it is noise. Once built, the user has to turn it off themselves |
+| 0-2 | **Never put the token in a repository.** Credentials live in `~/.claude/local/telegram.env` and nowhere else | Committed is stolen. That file belongs to no repo |
+| 0-3 | **Never print a token or chat id verbatim.** Use the masked output when confirming | It survives in transcripts, logs and screenshots |
+| 0-4 | **Read it as the user before sending.** No progress narration, no self-reporting | See "When to send" |
+| 0-5 | If the user says stop, **kill the processes too** | See the box below |
 
-### 파일을 지우는 것만으로는 멈추지 않는다
+### Deleting the file does not stop it
 
-실제로 있었던 일: heartbeat·poll 스크립트를 삭제한 뒤에도 메시지가 몇 시간 더 갔다.
-셸이 파일 내용을 이미 메모리에 읽어둔 채 프로세스가 여러 개 살아 있었기 때문이다.
-**파일 삭제 ≠ 중지.** 프로세스를 찾아 죽이고, 스케줄러도 함께 확인한다.
+What actually happened: heartbeat and poll scripts were deleted and messages kept arriving for
+hours. The shell had already read the files into memory and several processes were still alive.
+
+**Deleting ≠ stopping.** Find the processes, kill them, and check the scheduler too.
 
 ```bash
 # macOS / Linux
 pkill -f 'sendMessage|tg_heartbeat|tg_poll' || true
-crontab -l 2>/dev/null | grep -i telegram        # 결과 없어야 정상
+crontab -l 2>/dev/null | grep -i telegram        # must print nothing
 ```
 
 ```powershell
@@ -39,124 +40,130 @@ crontab -l 2>/dev/null | grep -i telegram        # 결과 없어야 정상
 Get-CimInstance Win32_Process |
   Where-Object { $_.CommandLine -match 'sendMessage|tg_heartbeat|tg_poll' } |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
-Get-ScheduledTask | Where-Object { $_.TaskName -match 'telegram|tg' }   # 결과 없어야 정상
+Get-ScheduledTask | Where-Object { $_.TaskName -match 'telegram|tg' }   # must print nothing
 ```
 
-에이전트 harness에 백그라운드 태스크·스케줄 기능이 있다면 그것도 두 번째 발신원이다. 같이 확인한다.
+If the agent harness has background tasks or scheduling, that is a second source. Check it too.
 
 ---
 
-## 언제 보내나 — 세 경우뿐
+## When to send — three occasions, no others
 
-1. **사용자가 요청했을 때** — "브리핑", "알림 보내줘"
-2. **작업이 멈출 때** — 끝났거나, 막혔거나, 답을 기다려야 할 때. 이게 가장 값어치 있는 한 통이다
-3. **보낼 값어치가 있다고 판단했을 때** — 드물게. 오래 걸리는 작업이 끝났거나, 되돌리기 어려운 일이 생겼을 때
+1. **The user asked** — for a briefing, an update, a ping
+2. **Work stops** — finished, blocked, or waiting on an answer. This is the one worth most
+3. **You judge it worth it** — rarely. A long job finished, or something hard to undo happened
 
-> 판단 기준 한 줄: **사용자가 자리를 비운 사이에 알았더라면 행동이 달라졌을 내용인가.**
-> 아니면 보내지 않는다. 터미널에 쓰면 된다.
+> The test, in one line: **would they have acted differently had they known while away?**
+> If not, do not send. Write it to the terminal.
 
-## 어떻게 보내나
+## How to send
 
-**상태 보고는 `report.mjs`를 쓴다.** 자유 서술 대신 고정 형식이고, 절반은 기계가 채운다:
-
-```bash
-node ~/.claude/skills/telegram-notify/scripts/report.mjs --now "지금 하는 일" --done "직전에 끝낸 것"
-node ~/.claude/skills/telegram-notify/scripts/report.mjs --blocked "사용자가 해줘야 하는 일"
-```
-
-```
-🟢 my-app · 18:27          ← 막히면 🔴, 알림 미리보기만으로 구분된다
-지금: 결제 실패 재시도 테스트 작성
-직전: 로그인 폼 검증 추가
-다음: 결제 화면 리팩토링
-⎇ feat/checkout · ● 결제 실패 재시도 (12분 전) · 미커밋 3   ← 기계가 읽는다
-```
-
-마지막 줄이 이 형식의 핵심이다. 자유 서술은 **"세션이 살아 있나"** 에 답하지 못한다 —
-한 시간째 멈춰 있어도 "작업 중입니다"라고 쓸 수 있고 정상인 보고와 구별되지 않는다.
-시각·브랜치·마지막 커밋과 그 나이·미커밋 수는 기계에서 읽으므로, 보고 두 개를 나란히 놓으면
-문장이 뭐라 하든 그 사이에 뭔가 움직였는지가 드러난다. 필드가 하나도 없어도 이 줄은 나간다.
-
-필드별 규칙과 문장 쓰는 법은 **[references/reporting.md](references/reporting.md)**.
-
-**그 외 임의 메시지**는:
+**Use `report.mjs` for status.** Fixed shape, and half of it is filled in by the machine:
 
 ```bash
-node ~/.claude/skills/telegram-notify/scripts/tg.mjs "내용"
-echo "내용" | node ~/.claude/skills/telegram-notify/scripts/tg.mjs
+node ~/.claude/skills/telegram-notify/scripts/report.mjs --now "what you are doing" --done "what just finished"
+node ~/.claude/skills/telegram-notify/scripts/report.mjs --blocked "what only the user can do"
 ```
 
-둘 다 성공하면 `200`만 출력한다. 자격증명이 없으면 설정 명령을 안내하고 종료 코드 `2`로 끝난다.
-bash를 선호하면 `scripts/tg.sh`도 같은 일을 한다.
+```
+🟢 my-app · 18:27          ← 🔴 when blocked, so the notification preview alone tells them
+now: writing the retry tests
+done: login form validation
+next: refactor the checkout screen
+⎇ feat/checkout · ● payment retry (12m ago) · uncommitted 3   ← read from git, not written by you
+```
+
+That last line is the point. Free text **cannot answer "is this session alive?"** — an agent
+stuck for an hour can still write "working on it", and it reads identically to a healthy report.
+The clock, branch, last commit and its age, and the uncommitted count come from the machine, so
+two reports side by side reveal whether anything moved, whatever the prose claims. That line goes
+out even with no fields at all.
+
+Field rules and how to word them: **[references/reporting.md](references/reporting.md)**.
+
+**For anything else:**
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/tg.mjs "text"
+echo "text" | node ~/.claude/skills/telegram-notify/scripts/tg.mjs
+```
+
+Both print `200` on success. With no credentials they print the setup command and exit `2`.
+`scripts/tg.sh` does the same for machines without Node.
 
 ---
 
-## 사용자가 보낸 메시지 읽기
+## Reading what the user sent
 
-이 채널은 **보내기만 하지 않는다.** 다만 뒤에서 듣고 있지도 않는다 — 듣고 있으려면 루프가 필요하고,
-그게 P0-1이 금지하는 것이다. 그래서 읽기는 **에이전트가 부를 때 한 번** 일어난다.
+This channel is **not send-only** — but nothing is listening in the background either. Listening
+needs a loop, and a loop is what P0-1 bans. So reading happens **once, when the agent asks**.
 
 ```bash
-node ~/.claude/skills/telegram-notify/scripts/tg-read.mjs             # 기다리는 메시지 보기
-node ~/.claude/skills/telegram-notify/scripts/tg-read.mjs --consume   # 보고 읽음 처리
+node ~/.claude/skills/telegram-notify/scripts/tg-read.mjs             # what is waiting
+node ~/.claude/skills/telegram-notify/scripts/tg-read.mjs --consume   # and mark it read
 ```
 
-`getUpdates`는 마지막으로 확인한 지점 이후를 전부 들고 있다. **스트림이 아니라 우편함이라서**,
-늦게 읽는다고 잃는 게 없다 — 이것이 온디맨드 읽기를 온전한 설계로 만든다.
+`getUpdates` holds everything since the last acknowledged offset. It is a **mailbox, not a
+stream**, so reading late loses nothing — which is what makes on-demand reading a complete design
+rather than a lossy one.
 
-**언제 읽나:** 오래 걸리는 작업의 매 단락, 보고를 보내기 직전, 그리고 사용자가 "왜 안 읽어"라고 할 때.
-읽지 못한 메시지는 `--consume` 없이 두면 다음에 다시 보인다 — 읽는 것과 처리하는 것은 다른 결정이다.
+**When to read:** at each natural break in a long job, immediately before sending a report, and
+whenever the user asks why you have not answered. Leave a message you could not act on
+unconsumed and it will still be there next time — reading and acting are separate decisions.
 
-> **이 스킬을 처음 쓰는 사람에게 반드시 말할 것:** 봇은 뒤에서 듣고 있지 않다.
-> 사용자가 봇에게 보낸 메시지는 에이전트가 읽으러 갈 때까지 조용히 기다린다.
-> 이걸 말해주지 않으면 "연동이 안 됐다"로 읽힌다 — 실제로 그렇게 읽혔다.
+> **Tell any first-time user this:** the bot is not listening in the background. A message they
+> send waits quietly until the agent goes to read it. Unsaid, it reads as "the integration is
+> broken" — which is exactly how it was read.
 
-### "세션 끝나도 되게 해줘"
+### "Make it work after the session ends"
 
-기본값은 세션 밖에서 아무것도 하지 않는 것이다. 바꿀 수 있는지는 **환경마다 다르므로 탐지한다.**
+The default is that nothing runs between sessions. Whether that can change **depends on the
+machine, so probe rather than guess**:
 
 ```bash
 node ~/.claude/skills/telegram-notify/scripts/reachability.mjs
 ```
 
-무엇이 가능한지만 찍고 **설치는 하지 않는다.** 판단 기준과 후보 넷, 그리고 만들 때 반드시 지킬 것은
-**[references/reachability.md](references/reachability.md)**.
+It reports what is possible and **installs nothing**. The criteria, the four candidates, and what
+must be done when building one: **[references/reachability.md](references/reachability.md)**.
 
-한 줄 요약: 대개 **OS 스케줄러 + 헤드리스 실행**이 답이고, 예전 사고와 다른 점은 **이름 붙은 작업**이라
-목록에 잡히고 한 줄로 끌 수 있다는 것이다. 만들면 **끄는 명령을 그 자리에서 같이 준다.**
+In one line: usually the answer is an **OS scheduler plus a headless run**, and what makes it
+different from the incident above is that a **named** task is listed and stops with one command.
+If you build one, hand the user the stop command in the same breath.
 
 ---
 
-## 연동
+## Setting it up
 
-사용자가 "텔레그램 연동해줘"라고 하면 **먼저 이미 되어 있는지 확인한다.** 새 머신이 아니면 대개 되어 있다.
+When asked to connect Telegram, **check whether it already is.** On anything but a new machine it
+usually is.
 
 ```bash
 node ~/.claude/skills/telegram-notify/scripts/tg-setup.mjs --check
 ```
 
-- 종료 코드 `0` → 연동됨. 봇 이름과 목적지가 출력된다. 여기서 끝
-- 종료 코드 `2` → 설정 필요. **[references/setup.md](references/setup.md)** 를 열어 그 절차대로 진행
+- exit `0` → connected. It prints the bot and the destination. Done
+- exit `2` → needs setting up. Open **[references/setup.md](references/setup.md)** and follow it
 
-토큰을 받은 뒤에는:
+Once you have a token:
 
 ```bash
-node ~/.claude/skills/telegram-notify/scripts/tg-setup.mjs <TOKEN>          # chat id 자동 탐색
-node ~/.claude/skills/telegram-notify/scripts/tg-setup.mjs <TOKEN> <CHAT>   # 여러 개일 때
+node ~/.claude/skills/telegram-notify/scripts/tg-setup.mjs <TOKEN>          # finds the chat id
+node ~/.claude/skills/telegram-notify/scripts/tg-setup.mjs <TOKEN> <CHAT>   # when several exist
 ```
 
-저장하고 **시험 발송까지 해서** 끝까지 되는지 증명한다. 저장만 되고 못 보내는 상태로 끝나지 않는다.
-토큰은 마스킹되어 출력되므로 **다시 원문으로 적지 말 것**.
+It saves, then **sends a test message** so a setup cannot end "succeeded but cannot send". The
+token is printed masked — **do not write it out again**.
 
-실패 코드별 원인은 [references/setup.md](references/setup.md)의 표에 있다.
+Failure codes and their causes are in [references/setup.md](references/setup.md).
 
 ---
 
-## 이식
+## Moving it
 
-자격증명은 `~/.claude/local/telegram.env` 하나뿐이고 프로젝트와 무관하다.
+Credentials are one file, `~/.claude/local/telegram.env`, and belong to no project.
 
-- **새 프로젝트** — 할 일 없음
-- **새 머신** — 그 파일만 만들면 된다 (설정 재실행 또는 파일 복사)
-- **프로젝트마다 다른 봇** — 환경변수 `TG_TOKEN` / `TG_CHAT` 이 파일보다 우선한다
-- **CI·컨테이너** — 같은 환경변수를 주입한다. 파일 없이 동작한다
+- **New project** — nothing to do
+- **New machine** — create that file (re-run setup, or copy it)
+- **A different bot per project** — `TG_TOKEN` / `TG_CHAT` in the environment win over the file
+- **CI or a container** — inject those variables; it works with no file at all

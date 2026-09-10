@@ -37,7 +37,7 @@ text="${1-}"
 # beats a complete one that does not.
 if [ "${#text}" -gt 4000 ]; then
     text="${text:0:3960}
-… (잘림)"
+… (truncated)"
 fi
 
 code=$(curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \

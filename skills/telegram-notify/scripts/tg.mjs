@@ -56,7 +56,7 @@ export const scrub = (s) => String(s).replace(/bot\d{6,}:[A-Za-z0-9_-]{20,}/g, '
  */
 export function fit(text, max = MAX) {
     if (text.length <= max) return text;
-    return `${text.slice(0, max - 40)}\n… (잘림)`;
+    return `${text.slice(0, max - 40)}\n… (truncated)`;
 }
 
 export async function send(text, creds = credentials()) {
