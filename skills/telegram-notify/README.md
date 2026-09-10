@@ -5,7 +5,7 @@
 
 > A Claude Code skill for reaching the user on Telegram — setup, send, and a fixed status-report
 > format whose machine-read half answers the question free text cannot: *is this session alive?*
-> Node 18+, zero dependencies. Korean content; the rules are language-independent.
+> Node 18+, zero dependencies. Korean by default; `TG_LANG=en` for English report labels.
 
 이 스킬의 절반은 **보내는 법**이고 나머지 절반은 **안 보내는 법**이다.
 알림 채널은 에이전트가 사용자에게 닿는 유일한 통로이자, 가장 쉽게 소음이 되는 통로다.
@@ -25,11 +25,11 @@
 그래서 보고의 **절반은 에이전트가 쓰지 않는다.**
 
 ```
-🟢 easy-mv-maker · 18:27
-지금: 게이트 통과 후 dev 트리 머지
-직전: #150 커서 8방향
-다음: #137 spine 머지
-⎇ check/all · ● Merge origin/fix/lasso-and-curve (12분 전)   ← 기계가 읽는다
+🟢 my-app · 18:27
+지금: 결제 실패 재시도 테스트 작성
+직전: 로그인 폼 검증 추가
+다음: 결제 화면 리팩토링
+⎇ feat/checkout · ● 결제 실패 재시도 (12분 전) · 미커밋 3   ← 기계가 읽는다
 ```
 
 마지막 줄(시각·브랜치·마지막 커밋과 그 나이·미커밋 파일 수)은 `git`과 시계에서 읽는다.
@@ -39,9 +39,9 @@
 막혔을 때는 **글리프 하나만 바뀐다** — 알림 미리보기만 보고 열어볼지 판단할 수 있어야 하기 때문:
 
 ```
-🔴 easy-mv-maker · 18:31
-막힘: APK 서명 키 비밀번호 필요
-⎇ check/all · ● … (16분 전)
+🔴 my-app · 18:31
+막힘: 배포 서명 키 비밀번호 필요 — 사용자만 알고 있음
+⎇ feat/checkout · ● 결제 실패 재시도 (16분 전)
 ```
 
 ---
@@ -82,7 +82,7 @@ chat id를 자동으로 찾고, 저장하고, **시험 발송까지 해서 끝�
 
 ```bash
 # 상태 보고 (권장)
-node ~/.claude/skills/telegram-notify/scripts/report.mjs --now "빌드 대기" --done "#150 머지"
+node ~/.claude/skills/telegram-notify/scripts/report.mjs --now "테스트 작성" --done "재시도 로직 구현"
 node ~/.claude/skills/telegram-notify/scripts/report.mjs --blocked "서명 키 비밀번호 필요"
 node ~/.claude/skills/telegram-notify/scripts/report.mjs --dry          # 보내지 않고 형식만 확인
 
@@ -155,6 +155,7 @@ skills/telegram-notify/
 | 프로젝트마다 다른 봇 | 환경변수 `TG_TOKEN` / `TG_CHAT` 이 파일보다 우선 |
 | CI · 컨테이너 | 같은 환경변수 주입. 파일 없이 동작 |
 | 파일 위치 변경 | `TG_ENV_FILE` |
+| 보고 라벨을 영어로 | `TG_LANG=en` (`now`/`done`/`next`/`blocked`, `12m ago`) |
 
 ---
 

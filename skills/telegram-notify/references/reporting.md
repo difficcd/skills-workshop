@@ -18,33 +18,33 @@
 ## 형태
 
 ```
-🟢 easy-mv-maker · 18:27
-지금: 게이트 통과 후 dev 트리 머지
-직전: #150 커서 8방향
-다음: #137 spine 머지
-⎇ check/all · ● Merge remote-tracking branch 'origin/fix/... (12분 전)
+🟢 my-app · 18:27
+지금: 결제 실패 재시도 테스트 작성
+직전: 로그인 폼 검증 추가
+다음: 결제 화면 리팩토링
+⎇ feat/checkout · ● 결제 실패 재시도 (12분 전) · 미커밋 3
 ```
 
 막혔을 때 — **글리프 하나만 바뀐다.** 알림 미리보기만 보고도 열어볼지 판단할 수 있어야 하기 때문이다:
 
 ```
-🔴 easy-mv-maker · 18:31
-막힘: BotFather 토큰 필요 — 사용자만 만들 수 있음
-⎇ check/all · ● … (16분 전)
+🔴 my-app · 18:31
+막힘: 배포 서명 키 비밀번호 필요 — 사용자만 알고 있음
+⎇ feat/checkout · ● 결제 실패 재시도 (16분 전)
 ```
 
 필드가 하나도 없어도 보낸다. 기계가 읽은 줄만으로도 살아 있는 세션과 멈춘 세션이 구별된다:
 
 ```
-🟢 easy-mv-maker · 18:27
-⎇ check/all · ● … (12분 전)
+🟢 my-app · 18:27
+⎇ feat/checkout · ● 결제 실패 재시도 (12분 전)
 ```
 
 ## 필드
 
 | 플래그 | 내용 | 규칙 |
 |---|---|---|
-| `--now` | 지금 하고 있는 일 | 한 줄. 동사로 시작. "리팩토링 중"❌ → "useToolSettings 추출 후 게이트"⭕ |
+| `--now` | 지금 하고 있는 일 | 한 줄. 동사로 시작. "리팩토링 중"❌ → "결제 재시도 테스트 3개 작성 중"⭕ |
 | `--done` | 직전에 끝낸 것 | 확인 가능한 것. PR 번호·파일명·수치 |
 | `--next` | 그 다음 | 모르면 생략 |
 | `--blocked` | 막힌 것 | **사용자가 해줘야 하는 일을 적는다.** 이게 있으면 🔴 |
@@ -53,14 +53,25 @@
 
 빈 필드는 줄째로 빠진다. 그래서 보이는 줄은 항상 정보다.
 
+### 언어
+
+라벨(`지금`/`직전`/`다음`/`막힘`/`미커밋`, 그리고 "12분 전")은 기본이 한국어다.
+`TG_LANG=en` 이면 `now`/`done`/`next`/`blocked`/`uncommitted`, `12m ago` 로 바뀐다.
+
+```bash
+TG_LANG=en node ~/.claude/skills/telegram-notify/scripts/report.mjs --now "writing tests"
+```
+
+내용은 에이전트가 쓰는 것이라 라벨과 별개다 — 라벨은 한국어, 내용은 영어로 섞어 써도 된다.
+
 ## 쓰는 법
 
 ```bash
 node ~/.claude/skills/telegram-notify/scripts/report.mjs \
-  --now "빌드 대기" --done "#150 머지" --next "#137 충돌 해결"
+  --now "테스트 작성" --done "재시도 로직 구현" --next "결제 화면 리팩토링"
 
 node ~/.claude/skills/telegram-notify/scripts/report.mjs \
-  --blocked "APK 서명 키 비밀번호 필요"
+  --blocked "배포 서명 키 비밀번호 필요"
 ```
 
 ## 언제

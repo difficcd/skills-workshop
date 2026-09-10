@@ -10,8 +10,8 @@
 // reports side by side then say whether anything actually happened between them, whatever the
 // prose claims.
 //
-//   node report.mjs --now "게이트 돌리는 중" --done "#150 머지" --next "#137 충돌 해결"
-//   node report.mjs --blocked "토큰 없음 - BotFather 토큰 필요"
+//   node report.mjs --now "테스트 작성" --done "재시도 로직 구현" --next "결제 화면 리팩토링"
+//   node report.mjs --blocked "배포 서명 키 비밀번호 필요"
 //   node report.mjs --now "빌드" --dry            # print, do not send
 //
 // Every field is optional. With none, it still sends the machine-read half, which is enough to
@@ -34,17 +34,31 @@ const git = (...args) => {
     } catch { return ''; }
 };
 
-const ago = (iso) => {
+/**
+ * Line labels. Korean by default because that is this skill's voice; `TG_LANG=en` switches it.
+ *
+ * Worth having rather than hard-coding: the labels are the only part of the output a reader has
+ * to understand, and a status report nobody can read is worse than none. Declared above the first
+ * use because `context` takes it as a default argument, and a const is not hoisted.
+ */
+export const LABELS = {
+    ko: { now: '지금', done: '직전', next: '다음', blocked: '막힘', uncommitted: '미커밋', unit: { m: '분', h: '시간', d: '일' }, ago: (n, u) => `${n}${u} 전`, just: '방금' },
+    en: { now: 'now', done: 'done', next: 'next', blocked: 'blocked', uncommitted: 'uncommitted', unit: { m: 'm', h: 'h', d: 'd' }, ago: (n, u) => `${n}${u} ago`, just: 'just now' },
+};
+
+export const lang = () => (String(process.env.TG_LANG || 'ko').toLowerCase().startsWith('en') ? 'en' : 'ko');
+
+const ago = (iso, L = LABELS[lang()]) => {
     if (!iso) return '';
     const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-    if (mins < 1) return '방금';
-    if (mins < 60) return `${mins}분 전`;
+    if (mins < 1) return L.just;
+    if (mins < 60) return L.ago(mins, L.unit.m);
     const hours = Math.round(mins / 60);
-    return hours < 48 ? `${hours}시간 전` : `${Math.round(hours / 24)}일 전`;
+    return hours < 48 ? L.ago(hours, L.unit.h) : L.ago(Math.round(hours / 24), L.unit.d);
 };
 
 /** What the machine says, as against what the agent says. */
-export function context(cwd = process.cwd()) {
+export function context(cwd = process.cwd(), L = LABELS[lang()]) {
     const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
     const subject = git('log', '-1', '--format=%s');
     const when = git('log', '-1', '--format=%cI');
@@ -52,7 +66,7 @@ export function context(cwd = process.cwd()) {
     return {
         project: basename(git('rev-parse', '--show-toplevel') || cwd),
         branch,
-        commit: subject ? `${subject.slice(0, 60)} (${ago(when)})` : '',
+        commit: subject ? `${subject.slice(0, 60)} (${ago(when, L)})` : '',
         dirty: dirty ? dirty.split('\n').filter(Boolean).length : 0,
     };
 }
@@ -65,22 +79,22 @@ const clock = (d = new Date()) => `${String(d.getHours()).padStart(2, '0')}:${St
  * Kept to a handful of lines on purpose: this is read on a lock screen. A line is omitted rather
  * than printed empty, so what is there is always information.
  */
-export function format({ now, done, next, blocked, note }, ctx = context(), at = new Date()) {
+export function format({ now, done, next, blocked, note }, ctx = context(), at = new Date(), L = LABELS[lang()]) {
     // The one glyph that changes: a blocked report has to be distinguishable at a glance, from
     // the notification preview alone, without opening anything.
     const head = `${blocked ? '🔴' : '🟢'} ${ctx.project || 'session'} · ${clock(at)}`;
     const lines = [head];
-    if (now) lines.push(`지금: ${now}`);
-    if (done) lines.push(`직전: ${done}`);
-    if (next) lines.push(`다음: ${next}`);
-    if (blocked) lines.push(`막힘: ${blocked}`);
+    if (now) lines.push(`${L.now}: ${now}`);
+    if (done) lines.push(`${L.done}: ${done}`);
+    if (next) lines.push(`${L.next}: ${next}`);
+    if (blocked) lines.push(`${L.blocked}: ${blocked}`);
     if (note) lines.push(note);
     // The machine-read line, always last and always present. Two reports differing only here
     // still prove the session moved; two identical ones prove it did not.
     const state = [
         ctx.branch && `⎇ ${ctx.branch}`,
         ctx.commit && `● ${ctx.commit}`,
-        ctx.dirty ? `미커밋 ${ctx.dirty}` : '',
+        ctx.dirty ? `${L.uncommitted} ${ctx.dirty}` : '',
     ].filter(Boolean).join(' · ');
     if (state) lines.push(state);
     return lines.join('\n');

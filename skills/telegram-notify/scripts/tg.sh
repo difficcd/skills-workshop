@@ -8,6 +8,9 @@
 #   tg.sh "message"
 #   echo "message" | tg.sh
 #
+# The bash counterpart of tg.mjs, for machines without Node. Setup is Node-only (tg-setup.mjs) -
+# it has to parse the getUpdates JSON, and doing that in shell is how you get a chat id wrong.
+#
 # Credentials come from the environment first, then ~/.claude/local/telegram.env. Neither lives in
 # a repository: a token in a commit is a stolen bot.
 
@@ -21,7 +24,7 @@ fi
 
 if [ -z "${TG_TOKEN:-}" ] || [ -z "${TG_CHAT:-}" ]; then
     echo "telegram is not set up on this machine." >&2
-    echo "run: bash $(dirname "$0")/tg-setup.sh <bot token>" >&2
+    echo "run: node $(dirname "$0")/tg-setup.mjs <bot token>" >&2
     exit 2
 fi
 
