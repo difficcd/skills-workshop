@@ -167,6 +167,36 @@ already waiting.
 
 Any failure prints nothing and exits 0 — a broken notifier must never be able to trap a session.
 
+### "Message the bot and have a session start"
+
+The hook above only helps **inside a session that is already running**. Making a message *start*
+one needs something that runs when nothing else does — `bridge.mjs`, called by an OS scheduler.
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/bridge.mjs --install   # prints the command; installs nothing
+node ~/.claude/skills/telegram-notify/scripts/bridge.mjs --dry       # what it would run
+```
+
+One poll: read the inbox, and if anything arrived, run `claude -p` on it and send the answer back.
+**It is not a loop** — it reads once and exits, so the scheduler owns the cadence and the OS owns
+the off switch. That is the difference from the detached shell loop that once kept sending for
+hours after its script was deleted.
+
+Guards, each for a failure that actually matters:
+
+- **A lock file**, so a two-minute schedule cannot start a second agent on the same repo while the
+  first is working. It carries a pid and a time, so a crashed run cannot block forever
+- **Messages are consumed only once the lock is held**, so a refused poll leaves them for the next
+- **A run timeout**, so one hung agent does not wedge every later poll
+- Every failure is logged and swallowed; a bridge that can trap the machine is worse than one that
+  misses a message
+
+**Say this to the user before they install it:** anyone who can message the bot can make an agent
+run on that machine, and the bot token is the only thing in the way. Do not install it where that
+trade is not acceptable, and revoke the token with @BotFather if it ever leaks. **Do not install
+it for them** — hand over the command so they own the off switch, and give them the stop line in
+the same breath.
+
 ### "Make it work after the session ends"
 
 The default is that nothing runs between sessions. Whether that can change **depends on the
@@ -187,8 +217,36 @@ If you build one, hand the user the stop command in the same breath.
 
 ## Setting it up
 
-When asked to connect Telegram, **check whether it already is.** On anything but a new machine it
-usually is.
+**Start here, always.** One command says what is already true and what the next step is:
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/install.mjs
+```
+
+```
+✓ 1. credentials present
+✓ 2. mode 2 (mode.mjs 1|2|3 to change)
+✓ 3. Stop hook wired - the inbox is read when a turn ends
+· 4. 6 permission rule(s) missing - USER: paste `install.mjs --perms` into ~/.claude/settings.json
+✓ 5. bridge is possible (Windows Task Scheduler) - USER: run `bridge.mjs --install`
+```
+
+Steps 1, 4 and 5 are marked **USER** and cannot be done by the agent, on purpose. Only a person
+can create a bot with @BotFather. And installing persistent automation — or granting the
+permission that would let it be installed — is the call that keeps a chat message from being able
+to run anything on the machine. An agent that could do that quietly is the thing worth being
+unable to do.
+
+So: **run the checklist, do the agent steps, hand the user their lines.** Do not try to install
+the scheduled task yourself; the permission classifier will stop you, and it is right to.
+
+`install.mjs --perms` prints the exact `permissions.allow` block. The rules are narrow by design —
+`Bash(node <this skill's scripts>/*)` and the four scheduler verbs naming **one** task. A blanket
+`PowerShell(*)` would buy the same convenience and hand over the machine.
+
+`install.mjs --json` also carries the hook block, so it never has to be reconstructed from prose.
+
+### Checking the link alone
 
 ```bash
 node ~/.claude/skills/telegram-notify/scripts/tg-setup.mjs --check
