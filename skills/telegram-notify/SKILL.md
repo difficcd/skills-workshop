@@ -217,8 +217,36 @@ If you build one, hand the user the stop command in the same breath.
 
 ## Setting it up
 
-When asked to connect Telegram, **check whether it already is.** On anything but a new machine it
-usually is.
+**Start here, always.** One command says what is already true and what the next step is:
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/install.mjs
+```
+
+```
+✓ 1. credentials present
+✓ 2. mode 2 (mode.mjs 1|2|3 to change)
+✓ 3. Stop hook wired - the inbox is read when a turn ends
+· 4. 6 permission rule(s) missing - USER: paste `install.mjs --perms` into ~/.claude/settings.json
+✓ 5. bridge is possible (Windows Task Scheduler) - USER: run `bridge.mjs --install`
+```
+
+Steps 1, 4 and 5 are marked **USER** and cannot be done by the agent, on purpose. Only a person
+can create a bot with @BotFather. And installing persistent automation — or granting the
+permission that would let it be installed — is the call that keeps a chat message from being able
+to run anything on the machine. An agent that could do that quietly is the thing worth being
+unable to do.
+
+So: **run the checklist, do the agent steps, hand the user their lines.** Do not try to install
+the scheduled task yourself; the permission classifier will stop you, and it is right to.
+
+`install.mjs --perms` prints the exact `permissions.allow` block. The rules are narrow by design —
+`Bash(node <this skill's scripts>/*)` and the four scheduler verbs naming **one** task. A blanket
+`PowerShell(*)` would buy the same convenience and hand over the machine.
+
+`install.mjs --json` also carries the hook block, so it never has to be reconstructed from prose.
+
+### Checking the link alone
 
 ```bash
 node ~/.claude/skills/telegram-notify/scripts/tg-setup.mjs --check

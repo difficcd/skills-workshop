@@ -60,6 +60,17 @@ Copy-Item -Recurse skills\telegram-notify "$env:USERPROFILE\.claude\skills\"
 
 다음 세션부터 목록에 뜬다. **"텔레그램 연동해줘"** 한 마디면 에이전트가 알아서 절차를 밟는다.
 
+### 여기서 시작
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/install.mjs
+```
+
+지금 뭐가 돼 있고 다음 단계가 뭔지 한 번에 보여준다. **USER** 로 표시된 단계는 에이전트가 못 한다 —
+봇 생성은 사람만 할 수 있고, 상시 자동화 설치와 그걸 설치할 권한을 주는 것은 **채팅 메시지가 이 머신에서
+아무거나 실행하지 못하게 막는 바로 그 지점**이기 때문이다. `install.mjs --perms` 가 붙여넣을 권한
+블록을 출력한다(이 스킬 스크립트와 작업 이름 하나만 허용하는 좁은 규칙).
+
 ### 연동 (처음 한 번, 2분)
 
 ```bash
@@ -183,6 +194,7 @@ skills/telegram-notify/
 │   └── reachability.md       # 세션이 끝난 뒤에도 닿게 하기 — 후보 4개와 고르는 기준
 └── scripts/                  # Node 18+, 의존성 없음
     ├── report.mjs            # 고정 형식 상태 보고 (기계가 절반을 채운다)
+    ├── install.mjs           # 여기서 시작 — 체크리스트 + 필요한 권한 블록
     ├── mode.mjs              # 어디로 보고할지 — 1 터미널만 / 2 둘 다 / 3 텔레그램만
     ├── stop-hook.mjs         # Stop 훅 — 수신함 자동 확인 + 모드 3 자동 보고
     ├── bridge.mjs            # 메시지로 세션 시작 (OS 스케줄러가 호출, 루프 아님)
