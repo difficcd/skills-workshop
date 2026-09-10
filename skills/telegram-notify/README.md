@@ -78,6 +78,19 @@ chat id를 자동으로 찾고, 저장하고, **시험 발송까지 해서 끝�
 
 ---
 
+## 읽기 — 봇은 뒤에서 듣고 있지 않다
+
+**처음 쓰는 사람이 반드시 알아야 할 것.** 사용자가 봇에게 보낸 메시지는 에이전트가 읽으러 갈 때까지
+조용히 기다린다. 뒤에서 듣고 있으려면 루프가 필요하고, 그게 P0-1이 금지하는 바로 그것이다.
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/tg-read.mjs             # 기다리는 것 보기
+node ~/.claude/skills/telegram-notify/scripts/tg-read.mjs --consume   # 보고 읽음 처리
+```
+
+`getUpdates`는 우편함이지 스트림이 아니라서, 늦게 읽는다고 잃는 게 없다.
+이걸 말해주지 않으면 "연동이 안 됐다"로 읽힌다 — 실제로 그렇게 읽혔고, 그래서 이 절이 있다.
+
 ## 쓰기
 
 ```bash
@@ -105,6 +118,7 @@ skills/telegram-notify/
 │   └── reporting.md          # 보고 형식과 필드별 문장 규칙
 └── scripts/                  # Node 18+, 의존성 없음
     ├── report.mjs            # 고정 형식 상태 보고 (기계가 절반을 채운다)
+    ├── tg-read.mjs           # 사용자가 보낸 메시지를 온디맨드로 읽기 (루프 아님)
     ├── tg.mjs                # 임의 메시지 전송
     ├── tg-setup.mjs          # 연동 · --check
     └── tg.sh                 # 전송의 bash 판 (Node를 쓸 수 없을 때)
