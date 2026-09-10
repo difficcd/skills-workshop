@@ -20,7 +20,7 @@
 // a machine where that is not an acceptable trade, and revoke the token with @BotFather if it
 // ever leaks.
 
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -35,6 +35,8 @@ export const LOG = join(HOME, 'telegram-bridge.log');
 const CWD = process.env.TG_BRIDGE_CWD || homedir();
 /** A run that hangs must not wedge every later poll. */
 const RUN_TIMEOUT_MS = Number(process.env.TG_BRIDGE_TIMEOUT_MS || 10 * 60 * 1000);
+/** The agent binary. Resolved once so the spawn needs no shell - see runAgent. */
+const CLAUDE = process.env.TG_BRIDGE_CLAUDE || (platform() === 'win32' ? 'claude.exe' : 'claude');
 
 const log = (line) => {
     try {
@@ -96,15 +98,34 @@ export function installHint(script = process.argv[1]) {
     ].join('\n');
 }
 
-/** Run the agent headlessly on one message and return what it said. */
+/**
+ * Run the agent headlessly on one message and return what it said.
+ *
+ * stdin is closed rather than inherited. `claude -p` waits on stdin for a few seconds and then
+ * gives up with a warning instead of an answer - which is what this returned the first time it
+ * was tried, and is invisible unless you actually run it.
+ */
 export function runAgent(prompt, cwd = CWD) {
     return new Promise((resolve) => {
-        execFile('claude', ['-p', prompt, '--output-format', 'text'],
-            { cwd, timeout: RUN_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024, encoding: 'utf8', shell: true },
-            (err, stdout, stderr) => resolve({
-                ok: !err,
-                text: (stdout || '').trim() || (stderr || '').trim() || (err ? String(err.message) : ''),
-            }));
+        // No shell. With shell:true the argument array is re-joined into a command line, and on
+        // Windows a prompt containing spaces is then split back apart - the agent received no
+        // prompt at all and answered "what would you like me to work on?". Spawning the
+        // executable directly passes the prompt as one argument, whatever is in it.
+        const child = spawn(CLAUDE, ['-p', prompt, '--output-format', 'text'], {
+            cwd, stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let out = '', err = '', done = false;
+        const finish = (ok) => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            resolve({ ok, text: out.trim() || err.trim() });
+        };
+        const timer = setTimeout(() => { try { child.kill(); } catch { } finish(false); }, RUN_TIMEOUT_MS);
+        child.stdout.on('data', (d) => { out += d; });
+        child.stderr.on('data', (d) => { err += d; });
+        child.on('error', (e) => { err += String(e.message); finish(false); });
+        child.on('close', (code) => finish(code === 0));
     });
 }
 
