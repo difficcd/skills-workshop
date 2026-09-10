@@ -91,6 +91,15 @@ node ~/.claude/skills/telegram-notify/scripts/tg-read.mjs --consume   # 보고 �
 `getUpdates`는 우편함이지 스트림이 아니라서, 늦게 읽는다고 잃는 게 없다.
 이걸 말해주지 않으면 "연동이 안 됐다"로 읽힌다 — 실제로 그렇게 읽혔고, 그래서 이 절이 있다.
 
+**"세션 끝나도 되게 해줘"** 는 환경마다 답이 다르다. 추측하지 말고 탐지한다:
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/reachability.mjs
+```
+
+OS·`claude` CLI·스케줄러·자격증명을 보고 후보 넷을 **확실성과 오버헤드로 채점해서** 하나를 고른다.
+설치는 하지 않는다 — 고르는 건 사용자다. 기준과 근거는 [`references/reachability.md`](references/reachability.md).
+
 ## 쓰기
 
 ```bash
@@ -115,10 +124,12 @@ skills/telegram-notify/
 ├── SKILL.md                  # 에이전트가 읽는 본문 (약 125줄)
 ├── references/
 │   ├── setup.md              # 연동 절차 · 종료 코드 · API 오류표
-│   └── reporting.md          # 보고 형식과 필드별 문장 규칙
+│   ├── reporting.md          # 보고 형식과 필드별 문장 규칙
+│   └── reachability.md       # 세션이 끝난 뒤에도 닿게 하기 — 후보 4개와 고르는 기준
 └── scripts/                  # Node 18+, 의존성 없음
     ├── report.mjs            # 고정 형식 상태 보고 (기계가 절반을 채운다)
     ├── tg-read.mjs           # 사용자가 보낸 메시지를 온디맨드로 읽기 (루프 아님)
+    ├── reachability.mjs      # 세션 밖에서 닿을 수 있나 — 환경 탐지 (설치는 안 함)
     ├── tg.mjs                # 임의 메시지 전송
     ├── tg-setup.mjs          # 연동 · --check
     └── tg.sh                 # 전송의 bash 판 (Node를 쓸 수 없을 때)

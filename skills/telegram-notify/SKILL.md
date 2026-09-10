@@ -111,6 +111,20 @@ node ~/.claude/skills/telegram-notify/scripts/tg-read.mjs --consume   # 보고 �
 > 사용자가 봇에게 보낸 메시지는 에이전트가 읽으러 갈 때까지 조용히 기다린다.
 > 이걸 말해주지 않으면 "연동이 안 됐다"로 읽힌다 — 실제로 그렇게 읽혔다.
 
+### "세션 끝나도 되게 해줘"
+
+기본값은 세션 밖에서 아무것도 하지 않는 것이다. 바꿀 수 있는지는 **환경마다 다르므로 탐지한다.**
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/reachability.mjs
+```
+
+무엇이 가능한지만 찍고 **설치는 하지 않는다.** 판단 기준과 후보 넷, 그리고 만들 때 반드시 지킬 것은
+**[references/reachability.md](references/reachability.md)**.
+
+한 줄 요약: 대개 **OS 스케줄러 + 헤드리스 실행**이 답이고, 예전 사고와 다른 점은 **이름 붙은 작업**이라
+목록에 잡히고 한 줄로 끌 수 있다는 것이다. 만들면 **끄는 명령을 그 자리에서 같이 준다.**
+
 ---
 
 ## 연동
