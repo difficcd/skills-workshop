@@ -159,6 +159,8 @@ returns `decision: block` with the messages, so the turn **continues and answers
 ending on something never seen. It cannot loop: the messages are consumed before the block, so
 the next stop finds an empty inbox.
 
+What it takes out of the inbox is only **its own** mail — see "Several sessions, one bot" below.
+
 Mode 2 deliberately does **not** auto-report: the terminal already reached them, and a message on
 every turn end is the noise P0-1 exists to prevent. There, P0-6 stays a judgement call.
 
@@ -166,6 +168,47 @@ Optionally on `SessionStart`, `tg-read.mjs` (without `--consume`) starts a sessi
 already waiting.
 
 Any failure prints nothing and exits 0 — a broken notifier must never be able to trap a session.
+
+### Several sessions, one bot
+
+One chat, one bot, but often several agents running at once - one per project. They all read the
+same inbox, and `getUpdates` acknowledges the **whole bot** at once: there is no way to take one
+message and leave another. So whichever session stopped first consumed everything, and a message
+meant for another project was eaten by a session it was not addressed to and never seen by the one
+it was for.
+
+`route.mjs` fixes that with the smallest thing that works: **each project gets a number, and the
+user puts the number at the front of the message.**
+
+```
+2 run the tests        -> project 2, and nowhere else
+run the tests          -> whoever stops first (right when only one session is open)
+?                      -> the bot replies with the list
+```
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/route.mjs     # the list, as the user is shown it
+```
+
+```
+Put the number first to pick a session:
+1 smartrouter-main
+2 easy-mv-maker
+```
+
+Numbers are handed out the first time a project's hook runs and never reused, so a number the
+user has learned keeps pointing at the same project. The list is sent to them automatically the
+first time a new project takes one - that is the only moment it is worth a message, and it is
+also the moment their copy of the list went out of date.
+
+Under it, `stop-hook.mjs` no longer consumes into itself. It drains Telegram into a **spool file**
+and takes only its own share out: messages addressed to its number, plus unaddressed ones. Mail
+for a project that is not open waits there for it, and is dropped after a day so a message cannot
+surface out of nowhere a fortnight later.
+
+**Say this to the user once:** without a number, the message goes to whichever session finishes
+first - which is fine with one session open, and a coin toss with two. Send `?` to be reminded of
+the numbers.
 
 ### "Message the bot and have a session start"
 
