@@ -13,7 +13,8 @@
 //
 // What it does, in order:
 //
-//   1. read the inbox (and consume it)
+//   1. read the inbox (and consume it), spooling what arrives so that a message addressed to
+//      another project is left for that project rather than eaten here - see route.mjs
 //   2. in mode 3, send the report - in mode 3 the terminal is not being read, so the stop has to
 //      go somewhere. In mode 2 the report stays a judgement call (P0-6); the terminal reached
 //      them, and a message on every single turn end is the noise P0-1 exists to prevent
@@ -31,21 +32,38 @@ import { pathToFileURL } from 'node:url';
 const out = (o) => { process.stdout.write(JSON.stringify(o)); process.exit(0); };
 
 async function main() {
-    const [{ credentials }, { inbox, mine }, { mode, canSend }, report] = await Promise.all([
+    const [tg, { inbox, mine }, { mode, canSend }, report, route] = await Promise.all([
         import('./tg.mjs'), import('./tg-read.mjs'), import('./mode.mjs'), import('./report.mjs'),
+        import('./route.mjs'),
     ]);
+    const { credentials } = tg;
 
     const creds = credentials();
     if (!creds.token || !creds.chat || !canSend()) out({ suppressOutput: true });
 
-    const r = await inbox(creds);
-    const msgs = r.ok ? mine(r.messages, creds.chat) : [];
+    // This project's number. Registering here rather than at session start means a project that
+    // never stops never takes a number, which is what keeps the list short enough to be read.
+    const me = route.register();
 
-    // Consume before anything else can fail. An unconsumed message that already produced a block
-    // would block again on the next stop, and that is the loop worth designing out.
-    if (msgs.length) {
+    const r = await inbox(creds);
+
+    // Consume from Telegram before anything else can fail, but into the spool, not into this
+    // session. The offset is a single acknowledgement for the whole bot, so reading at all takes
+    // every project's mail; the spool is where the other projects' share waits for them.
+    if (r.ok && r.messages.length) {
+        route.spoolAdd(mine(r.messages, creds.chat));
         const last = Math.max(...r.messages.map(m => m.updateId));
         try { await inbox(creds, last + 1); } catch { }
+    }
+
+    let msgs = route.spoolTake(me.n);
+
+    // `?` is answered here rather than handed to the agent: it is a question about the wiring,
+    // not about the work, and waking a session to answer it would cost a turn.
+    const asked = msgs.filter(m => route.isMapRequest(m.text));
+    msgs = msgs.filter(m => !route.isMapRequest(m.text));
+    if (asked.length || me.fresh) {
+        try { await tg.send(route.formatMap(me.list), creds); } catch { }
     }
 
     if (mode().id === 3) {
@@ -62,7 +80,7 @@ async function main() {
     out({
         decision: 'block',
         reason: `The user sent this on Telegram while you were working. Address it before stopping.\n\n${body}`,
-        systemMessage: `Telegram: ${msgs.length} message(s) picked up`,
+        systemMessage: `Telegram: ${msgs.length} message(s) picked up (this session is ${me.n})`,
     });
 }
 

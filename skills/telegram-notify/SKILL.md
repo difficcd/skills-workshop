@@ -159,6 +159,8 @@ returns `decision: block` with the messages, so the turn **continues and answers
 ending on something never seen. It cannot loop: the messages are consumed before the block, so
 the next stop finds an empty inbox.
 
+What it takes out of the inbox is only **its own** mail — see "Several sessions, one bot" below.
+
 Mode 2 deliberately does **not** auto-report: the terminal already reached them, and a message on
 every turn end is the noise P0-1 exists to prevent. There, P0-6 stays a judgement call.
 
@@ -166,6 +168,78 @@ Optionally on `SessionStart`, `tg-read.mjs` (without `--consume`) starts a sessi
 already waiting.
 
 Any failure prints nothing and exits 0 — a broken notifier must never be able to trap a session.
+
+### Several sessions, one bot
+
+One chat, one bot, but often several agents running at once - one per project. They all read the
+same inbox, and `getUpdates` acknowledges the **whole bot** at once: there is no way to take one
+message and leave another. So whichever session stopped first consumed everything, and a message
+meant for another project was eaten by a session it was not addressed to and never seen by the one
+it was for.
+
+`route.mjs` fixes that with the smallest thing that works: **each project gets a number, and the
+user puts the number at the front of the message.**
+
+```
+2 run the tests        -> project 2, and nowhere else
+run the tests          -> whoever stops first (right when only one session is open)
+?                      -> the bot replies with the list
+```
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/route.mjs     # the list, as the user is shown it
+```
+
+```
+Put the number first to pick a session:
+1 smartrouter-main
+2 easy-mv-maker  (closed)
+3 old-thing      (never run)
+```
+
+Numbers are handed out the first time a project's hook runs and never reused, so a number the
+user has learned keeps pointing at the same project. The list is sent to them automatically the
+first time a new project takes one - that is the only moment it is worth a message, and it is
+also the moment their copy of the list went out of date.
+
+**Whether a session is open is read, not registered.** The register only grows, so without this
+the list fills up with places nobody is working, and a number can point at a session that ended
+days ago - the message then sits in the spool waiting for something that is never coming back. The
+harness already writes the answer down: every session keeps a transcript at
+`~/.claude/projects/<encoded cwd>/<session id>.jsonl` and touches it as it works, so the newest
+mtime in that directory is when that project was last doing something. Nothing has to register
+itself, and a session that dies leaves no state behind to clean up. Measured on a real machine: two
+open sessions at 0-1 minutes, every closed one at 50 minutes or more - the signal separates cleanly.
+
+Closed rows are **marked, not dropped**. Removing one would take away a line the user may still be
+reading, and a number that vanishes between reading the list and typing it is the one failure the
+numbers exist to prevent.
+
+**A message with no number goes to whichever session stops first, not to all of them.** One
+session, deliberately. It also means an unaddressed message can land somewhere you did not mean,
+which is worth saying out loud: that is exactly how one arrived in the wrong project on the day
+this was built.
+
+Under it, `stop-hook.mjs` no longer consumes into itself. It drains Telegram into a **spool file**
+and takes only its own share out: messages addressed to its number, plus unaddressed ones. Mail
+for a project that is not open waits there for it, and is dropped after a day so a message cannot
+surface out of nowhere a fortnight later.
+
+Each spool operation is a read, a decision, and a write back, and two Stop hooks can end a turn in
+the same second: both read the same array, both write, and the second rename wins - so a message
+one session already took reappears and is delivered twice. Atomic writes cannot fix that; only
+excluding the other reader can. An exclusive-create lock file (`wx`) does it with no library and no
+daemon. A lock older than a minute belonged to a process that died holding it and is taken over,
+and if the lock cannot be had at all the work is done **unlocked** rather than skipped - a
+duplicate beats silence, which is the failure this whole skill exists to prevent.
+
+**Say this to the user once:** without a number, the message goes to whichever session finishes
+first - which is fine with one session open, and a coin toss with two. Send `?` to be reminded of
+the numbers.
+
+```bash
+node --test skills/telegram-notify/test/route.test.mjs    # 16 tests
+```
 
 ### "Message the bot and have a session start"
 
