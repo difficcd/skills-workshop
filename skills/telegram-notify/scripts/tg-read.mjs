@@ -69,10 +69,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (process.argv.includes('--json')) {
         console.log(JSON.stringify(msgs, null, 2));
     } else if (!msgs.length) {
-        console.log('(빈 수신함)');
+        console.log('(inbox empty)');
     } else {
         for (const m of msgs) {
-            console.log(`[${m.at.slice(11, 16)}] ${m.from}${m.kind === 'non-text' ? ' (텍스트 아님)' : ''}: ${m.text}`);
+            console.log(`[${m.at.slice(11, 16)}] ${m.from}${m.kind === 'non-text' ? ' (not text)' : ''}: ${m.text}`);
         }
     }
 
@@ -81,6 +81,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (process.argv.includes('--consume') && r.messages.length) {
         const last = Math.max(...r.messages.map(m => m.updateId));
         await inbox(creds, last + 1);
-        console.log(`(${r.messages.length}건 읽음 처리)`);
+        console.log(`(${r.messages.length} marked read)`);
     }
 }

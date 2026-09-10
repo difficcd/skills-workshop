@@ -1,79 +1,82 @@
-# 연동 절차
+# Setting up the link
 
-`SKILL.md`에서 `--check`가 종료 코드 `2`(설정 필요)를 냈을 때만 이 파일이 필요하다.
+Only needed when `--check` returned exit `2` (not configured).
 
 ---
 
-## 1. 토큰 — 사용자만 할 수 있다
+## 1. The token — only the user can get it
 
-에이전트는 텔레그램 계정이 없으므로 토큰을 스스로 만들 수 없다. 사용자에게 이렇게 안내한다:
+An agent has no Telegram account and cannot create a bot. Tell the user:
 
-> 텔레그램에서 **@BotFather** 에게 `/newbot` 을 보내고, 봇 이름과 사용자명(`_bot`으로 끝나야 함)을 정하면
-> `123456789:AA...` 형태의 토큰을 줍니다. 그 토큰을 붙여넣어 주세요.
+> In Telegram, message **@BotFather** with `/newbot`, pick a name and a username (it must end in
+> `_bot`), and it gives you a token shaped like `123456789:AA...`. Paste that here.
 >
-> 그리고 **새로 만든 봇과의 대화창을 열어 아무 메시지나 한 번 보내주세요.**
-> 봇은 먼저 말을 걸 수 없어서, 사용자가 한 번 말을 걸어야 어디로 보낼지 알 수 있습니다.
+> Then **open a chat with the bot you just made and send it any message.**
+> A bot cannot start a conversation, so it only learns where to write once you have written to it.
 
-두 번째 문단을 빠뜨리면 다음 단계가 `no chat found`로 끝난다. 이게 가장 흔한 실패다.
+Leaving out that second paragraph is what makes the next step fail with `no chat found`. It is the
+most common failure by far.
 
-**채널로 받고 싶다면** 대화 대신: 채널을 만들고 → 봇을 **관리자로** 추가하고 → 아무 글이나 하나 올린다.
-`chat id`가 `-100`으로 시작하는 음수가 된다. 정상이다.
+**For a channel instead of a chat:** create the channel → add the bot as an **administrator** →
+post anything. The chat id will be a negative number starting `-100`. That is normal.
 
-## 2. 저장
+## 2. Save
 
 ```bash
 node ~/.claude/skills/telegram-notify/scripts/tg-setup.mjs <TOKEN>
 ```
 
-`getUpdates`로 chat id를 찾고, `~/.claude/local/telegram.env`에 `0600`으로 저장하고, **시험 발송까지 한다.**
-여러 대화가 봇에게 말을 걸었다면 목록을 출력하고 멈춘다. 사용자가 고른 것을 두 번째 인자로 준다:
+It finds the chat id from `getUpdates`, writes `~/.claude/local/telegram.env` with mode `0600`,
+and **sends a test message**. If several chats have written to the bot it prints them and stops;
+pass the one the user picks as a second argument:
 
 ```bash
 node ~/.claude/skills/telegram-notify/scripts/tg-setup.mjs <TOKEN> <CHAT_ID>
 ```
 
-**토큰을 대화에 다시 적지 말 것.** 스크립트가 마스킹해서 출력한다.
+**Do not write the token out again.** The script prints it masked.
 
-## 3. 확인
+## 3. Confirm
 
 ```bash
-node ~/.claude/skills/telegram-notify/scripts/tg-setup.mjs --check   # 0이어야 통과
-node ~/.claude/skills/telegram-notify/scripts/report.mjs --now "연동 확인"
+node ~/.claude/skills/telegram-notify/scripts/tg-setup.mjs --check   # must be 0
+node ~/.claude/skills/telegram-notify/scripts/report.mjs --now "checking the link"
 ```
 
 ---
 
-## 종료 코드
+## Exit codes
 
-| 코드 | 뜻 | 할 일 |
+| Code | Meaning | Do |
 |---|---|---|
-| `0` | 정상 | — |
-| `1` | 토큰 거부, 또는 시험 발송 실패 | 아래 표 |
-| `2` | 자격증명 없음 | 1단계부터 |
-| `3` | `no chat found` | 사용자가 아직 봇에게 말을 걸지 않았다. 1단계 두 번째 문단 |
-| `4` | 대화가 여럿 | 출력된 목록에서 고른 id를 두 번째 인자로 |
+| `0` | fine | — |
+| `1` | token rejected, or the test message failed | see the table below |
+| `2` | no credentials | start at step 1 |
+| `3` | `no chat found` | the user has not messaged the bot yet — repeat step 1's second paragraph |
+| `4` | several chats | pass the chosen id as the second argument |
 
-## API 오류
+## API errors
 
-| 응답 | 원인 | 할 일 |
+| Response | Cause | Do |
 |---|---|---|
-| `401 Unauthorized` | 토큰이 틀렸거나 폐기됨 | @BotFather `/token`으로 재발급 |
-| `403 Forbidden: bot was blocked by the user` | 사용자가 봇을 차단 | 대화창에서 차단 해제 |
-| `403 ... not enough rights` | 채널에서 봇이 관리자가 아님 | 관리자로 추가 |
-| `400 chat not found` | chat id가 틀림, 또는 채널이 삭제됨 | `--check`로 다시 확인 |
-| `429 Too Many Requests` | 너무 자주 보냄 | **P0-1을 어기고 있다는 신호다.** 자동 전송이 어딘가에 살아 있는지 먼저 확인 |
-| `200`인데 안 옴 | 다른 chat으로 감 | `--check`가 목적지 이름을 출력한다 |
+| `401 Unauthorized` | wrong or revoked token | reissue with @BotFather `/token` |
+| `403 Forbidden: bot was blocked by the user` | the user blocked the bot | unblock in the chat |
+| `403 … not enough rights` | the bot is not an admin of the channel | make it one |
+| `400 chat not found` | wrong chat id, or the channel was deleted | re-check with `--check` |
+| `429 Too Many Requests` | sending too often | **a sign P0-1 is being violated.** Look for automatic sending still alive |
+| `200` but nothing arrives | it went to a different chat | `--check` prints the destination's name |
 
-## 자격증명이 사는 곳
+## Where the credentials live
 
 ```
-~/.claude/local/telegram.env        # 0600, 프로젝트와 무관, 어느 repo에도 없음
+~/.claude/local/telegram.env        # 0600, belongs to no project, in no repo
   TG_TOKEN='...'
   TG_CHAT='...'
 ```
 
-환경변수 `TG_TOKEN` / `TG_CHAT` 이 파일보다 우선한다. CI·컨테이너에서는 파일 없이 그것만 주입하면 된다.
-`TG_ENV_FILE` 로 파일 위치를 바꿀 수 있다.
+`TG_TOKEN` / `TG_CHAT` in the environment win over the file, so CI and containers need only those
+and no file. `TG_ENV_FILE` moves the file.
 
-**절대 하지 말 것:** 저장소 안의 `.env`, `settings.json`, 스크립트 상수, 커밋 메시지, 이슈 본문.
-한 번 푸시되면 지워도 히스토리에 남고, 토큰은 즉시 폐기하고 재발급해야 한다.
+**Never:** a `.env` inside a repository, `settings.json`, a constant in a script, a commit message,
+an issue body. Once pushed it stays in the history even if deleted, and the token has to be
+revoked and reissued.

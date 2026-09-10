@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 // Can the user reach the agent after the session ends - and if so, how, on *this* machine?
 //
-// The question this answers came from a real one: "저번에는 세션이 끝나도 내가 텔레그램 보내면
-// 연결이 됐었는데 왜 지금은 안 되냐". It used to work because a detached shell loop was polling
-// in the background. That loop is also what kept sending messages for hours after its script was
-// deleted, and it is what P0-1 bans.
+// "It used to answer even after the session ended - why not now?" is a question with a real
+// answer: something was polling in the background, detached from any session. That loop is also
+// what kept sending messages for hours after its script was deleted, and it is what P0-1 bans.
 //
 // So the honest answer is "it depends what this machine has", and guessing is worse than looking.
 // This probes; it installs nothing. Installing is a separate decision the user makes.
@@ -66,8 +65,8 @@ export function probe() {
 /**
  * The options, scored against the rule the user gave: **low overhead AND certain.**
  *
- * "오버헤드가 살짝 있어도 확실하지 않으면 선택하지 마. 확실해도 오버헤드가 너무 커도 선택하지 마."
- * Both have to hold. An option that fails either is not a compromise, it is a no.
+ * Both have to hold. Slightly cheaper but unproven is a no; certain but expensive is also a no.
+ * An option that fails either is not a compromise - it is a no.
  */
 export function options(p = probe()) {
     return [
@@ -85,7 +84,7 @@ export function options(p = probe()) {
             what: 'a scheduled cloud routine reads the inbox and acts',
             certain: true,
             overhead: 'high - every tick is a full cloud session, most of them finding nothing',
-            why: 'Certain, and independent of whether this machine is even on. But polling every few minutes means hundreds of runs a day to catch a handful of messages, which is the "확실해도 오버헤드가 너무 커도" case.',
+            why: 'Certain, and independent of whether this machine is even on. But polling every few minutes means hundreds of runs a day to catch a handful of messages, which is the certain-but-too-expensive case.',
         },
         {
             id: 'push-webhook',
@@ -118,16 +117,16 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         console.log(JSON.stringify({ probe: p, options: opts, recommend: pick.id }, null, 2));
     } else {
         console.log(`os:        ${p.os}`);
-        console.log(`claude:    ${p.cli || '없음 (PATH에 claude 없음)'}`);
-        console.log(`scheduler: ${p.scheduler || '없음'}`);
-        console.log(`telegram:  ${p.telegram ? '설정됨' : '미설정'}`);
+        console.log(`claude:    ${p.cli || 'not on PATH'}`);
+        console.log(`scheduler: ${p.scheduler || 'none'}`);
+        console.log(`telegram:  ${p.telegram ? 'configured' : 'not configured'}`);
         console.log('');
         for (const o of opts) {
             console.log(`${o.certain ? '✓' : '✗'} ${o.id} — ${o.what}`);
-            console.log(`    오버헤드: ${o.overhead}`);
+            console.log(`    overhead: ${o.overhead}`);
             console.log(`    ${o.why}`);
         }
         console.log(`\n→ ${pick.id}`);
-        console.log('  설치는 하지 않았습니다. references/reachability.md 를 보고 사용자에게 확인받으세요.');
+        console.log('  Nothing installed. Read references/reachability.md, then ask the user.');
     }
 }

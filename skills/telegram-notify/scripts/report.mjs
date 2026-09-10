@@ -2,7 +2,7 @@
 // A short, fixed-shape status report.
 //
 // The question this answers is not "what did you do" - it is **"is this session still alive, and
-// on what?"** A free-text update cannot answer that: an agent can write "작업 중입니다" while
+// on what?"** A free-text update cannot answer that: an agent can write "still working on it" while
 // nothing has moved for an hour, and it reads exactly like one where everything is fine.
 //
 // So the shape is fixed and half of it is not written by the agent at all. The clock, the branch,
@@ -10,9 +10,9 @@
 // reports side by side then say whether anything actually happened between them, whatever the
 // prose claims.
 //
-//   node report.mjs --now "테스트 작성" --done "재시도 로직 구현" --next "결제 화면 리팩토링"
-//   node report.mjs --blocked "배포 서명 키 비밀번호 필요"
-//   node report.mjs --now "빌드" --dry            # print, do not send
+//   node report.mjs --now "writing tests" --done "retry logic" --next "refactor checkout"
+//   node report.mjs --blocked "signing key password needed"
+//   node report.mjs --now "building" --dry        # print, do not send
 //
 // Every field is optional. With none, it still sends the machine-read half, which is enough to
 // tell a live session from a stopped one.

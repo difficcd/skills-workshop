@@ -1,114 +1,111 @@
-# 보고 포맷
+# The report format
 
-에이전트가 자리를 비운 사용자에게 보내는 상태 보고의 고정 형식.
-`scripts/report.mjs` 가 이 형식을 만든다.
+The fixed shape an agent uses to tell a user who has walked away where things stand.
+`scripts/report.mjs` produces it.
 
 ---
 
-## 이 형식이 답하려는 질문
+## The question it is built to answer
 
-"무슨 일을 했나"가 아니라 **"이 세션이 아직 살아 있고, 무엇을 하고 있나"** 이다.
+Not "what did you do" but **"is this session still alive, and on what?"**
 
-자유 서술은 이 질문에 답하지 못한다. 한 시간째 아무것도 안 움직였는데도 "작업 중입니다"라고 쓸 수 있고,
-정상인 세션의 보고와 글자 하나 다르지 않다. 사용자는 그걸 읽고도 여전히 모른다.
+Free text cannot answer that. An agent can write "still working on it" when nothing has moved for
+an hour, and it is indistinguishable, character for character, from a healthy report. The user
+reads it and still does not know.
 
-그래서 **절반은 에이전트가 쓰지 않는다.** 시각·브랜치·마지막 커밋과 그 나이·미커밋 파일 수는 기계에서 읽는다.
-보고 두 개를 나란히 놓으면, 문장이 뭐라 하든 그 사이에 실제로 뭔가 움직였는지가 드러난다.
+So **half of it is not written by the agent.** The clock, the branch, the last commit and its age,
+and the count of uncommitted files are read from the machine. Put two reports side by side and
+whether anything actually moved between them shows through, whatever the prose claims.
 
-## 형태
+## The shape
 
 ```
 🟢 my-app · 18:27
-지금: 결제 실패 재시도 테스트 작성
-직전: 로그인 폼 검증 추가
-다음: 결제 화면 리팩토링
-⎇ feat/checkout · ● 결제 실패 재시도 (12분 전) · 미커밋 3
+now: writing the retry tests
+done: login form validation
+next: refactor the checkout screen
+⎇ feat/checkout · ● payment retry (12m ago) · uncommitted 3
 ```
 
-막혔을 때 — **글리프 하나만 바뀐다.** 알림 미리보기만 보고도 열어볼지 판단할 수 있어야 하기 때문이다:
+Blocked — **one glyph changes**, because the notification preview alone has to be enough to decide
+whether to open it:
 
 ```
 🔴 my-app · 18:31
-막힘: 배포 서명 키 비밀번호 필요 — 사용자만 알고 있음
-⎇ feat/checkout · ● 결제 실패 재시도 (16분 전)
+blocked: deploy signing key password - only the user has it
+⎇ feat/checkout · ● payment retry (16m ago)
 ```
 
-필드가 하나도 없어도 보낸다. 기계가 읽은 줄만으로도 살아 있는 세션과 멈춘 세션이 구별된다:
+It sends with no fields at all. The machine-read line alone separates a live session from a
+stopped one:
 
 ```
 🟢 my-app · 18:27
-⎇ feat/checkout · ● 결제 실패 재시도 (12분 전)
+⎇ feat/checkout · ● payment retry (12m ago)
 ```
 
-## 필드
+## Fields
 
-| 플래그 | 내용 | 규칙 |
+| Flag | Content | Rule |
 |---|---|---|
-| `--now` | 지금 하고 있는 일 | 한 줄. 동사로 시작. "리팩토링 중"❌ → "결제 재시도 테스트 3개 작성 중"⭕ |
-| `--done` | 직전에 끝낸 것 | 확인 가능한 것. PR 번호·파일명·수치 |
-| `--next` | 그 다음 | 모르면 생략 |
-| `--blocked` | 막힌 것 | **사용자가 해줘야 하는 일을 적는다.** 이게 있으면 🔴 |
-| `--note` | 그 외 한 줄 | 드물게 |
-| `--dry` | 보내지 않고 출력만 | 형식 확인용 |
+| `--now` | what is happening right now | One line, starting with a verb. "refactoring"❌ → "writing 3 retry tests"⭕ |
+| `--done` | what just finished | Something checkable: a PR number, a filename, a count |
+| `--next` | what follows | Omit if unknown |
+| `--blocked` | what is stuck | **Write what the user has to do.** Its presence makes it 🔴 |
+| `--note` | anything else, one line | Rare |
+| `--dry` | print without sending | For checking the shape |
 
-빈 필드는 줄째로 빠진다. 그래서 보이는 줄은 항상 정보다.
+An empty field drops its whole line, so every line you see is information.
 
-### 언어
+### Language
 
-라벨(`지금`/`직전`/`다음`/`막힘`/`미커밋`, 그리고 "12분 전")은 기본이 한국어다.
-`TG_LANG=en` 이면 `now`/`done`/`next`/`blocked`/`uncommitted`, `12m ago` 로 바뀐다.
+Labels (`now`/`done`/`next`/`blocked`/`uncommitted`, and "12m ago") default to Korean —
+`지금`/`직전`/`다음`/`막힘`/`미커밋`, "12분 전". `TG_LANG=en` switches them:
 
 ```bash
 TG_LANG=en node ~/.claude/skills/telegram-notify/scripts/report.mjs --now "writing tests"
 ```
 
-내용은 에이전트가 쓰는 것이라 라벨과 별개다 — 라벨은 한국어, 내용은 영어로 섞어 써도 된다.
+The content is written by the agent and is independent of the labels; mixing is fine.
 
-## 쓰는 법
+## For work running without supervision — `--next` becomes the most important field
 
-```bash
-node ~/.claude/skills/telegram-notify/scripts/report.mjs \
-  --now "테스트 작성" --done "재시도 로직 구현" --next "결제 화면 리팩토링"
+When an agent chains several steps on its own, the user needs to know **what is about to happen**
+more than what is happening. Only that lets them decide whether to intervene. `--now` describes
+something already done and beyond recall; `--next` has not happened yet.
 
-node ~/.claude/skills/telegram-notify/scripts/report.mjs \
-  --blocked "배포 서명 키 비밀번호 필요"
-```
-
-## 감독 없이 도는 작업에서 — `--next` 가 가장 중요한 필드가 된다
-
-에이전트가 여러 단계를 스스로 이어서 할 때, 사용자는 **지금 무엇을 하는지**보다
-**다음에 무엇을 할 것인지**를 알아야 한다. 그것만이 개입할지 말지를 결정하게 해준다.
-`--now` 는 이미 벌어진 일이라 되돌릴 수 없지만, `--next` 는 아직 안 벌어졌다.
-
-그래서 감독 없는 구간에서는 세 가지를 반드시 채운다:
+So in an unsupervised stretch, fill in three:
 
 | | |
 |---|---|
-| `--done` | 되돌리기 어려운 것을 먼저 (머지, 삭제, 푸시, 배포) |
-| `--next` | **되돌리기 어려운 다음 동작.** 사용자가 막을 마지막 기회다 |
-| `--blocked` | 사용자만 할 수 있는 일. 있으면 🔴 |
+| `--done` | the hard-to-undo things first — merges, deletions, pushes, deploys |
+| `--next` | **the next hard-to-undo action.** This is their last chance to stop it |
+| `--blocked` | what only they can do. Its presence makes it 🔴 |
 
 ```bash
-node ~/.claude/skills/telegram-notify/scripts/report.mjs   --done "PR 3건 머지, 브랜치 정리"   --next "결제 모듈 리팩토링 — 파일 12개 수정 예정"
+node ~/.claude/skills/telegram-notify/scripts/report.mjs \
+  --done "merged 3 PRs, cleaned up branches" \
+  --next "refactor the payment module - 12 files"
 ```
 
-**한 단락이 끝날 때마다 한 통**이지, 시간 간격으로 보내는 게 아니다 (P0-1).
-"한 단락"의 기준: 되돌리기 어려운 일을 했거나, 이제부터 하려는 때.
+**One message per stretch of work**, not per interval of time (P0-1). A "stretch" ends when you
+have done something hard to undo, or are about to.
 
-보고를 보내기 직전에 `tg-read.mjs` 로 수신함을 확인한다 — 사용자가 이미 방향을 바꿔놨을 수 있고,
-그걸 모른 채 다음 단계로 넘어가는 것이 감독 없는 루프의 가장 비싼 실패다.
+**Read the inbox immediately before reporting** — the user may already have changed direction, and
+moving to the next step without knowing that is the most expensive failure an unsupervised loop
+has.
 
-## 언제
+## When
 
-`SKILL.md`의 세 경우 그대로. 특히 **작업이 멈출 때**가 이 형식의 본래 용도다 —
-끝났거나, 막혔거나, 답을 기다려야 할 때.
+The three occasions in SKILL.md. **Work stopping** is what this shape was made for — finished,
+blocked, or waiting on an answer.
 
-**주기적으로 돌리지 않는다.** 이 스크립트를 cron·스케줄러·반복 태스크에 넣는 순간 P0-1 위반이고,
-`429 Too Many Requests`가 그 사실을 알려주는 첫 신호다.
+**Never run it on a timer.** Putting this script in cron, a scheduler or a repeating task is a
+P0-1 violation, and `429 Too Many Requests` is the first sign it happened.
 
-## 문장 규칙
+## Wording
 
-- 휴대폰 잠금화면에서 읽는다. **첫 줄만 읽어도 상황이 서게**
-- 수치를 넣는다. "테스트 3개 실패"가 "일부 실패"보다 항상 낫다
-- 코드 블록·표·PR 본문 전체를 붙여넣지 않는다. 링크는 한 줄
-- 사과·다짐·자기 평가를 넣지 않는다. 사실과, 필요한 것만
+- It is read on a lock screen. **The first line alone should stand up**
+- Put numbers in. "3 tests failing" always beats "some failures"
+- No code blocks, no tables, no pasted PR bodies. One line for a link
+- No apologies, no promises, no self-assessment. Facts, and what you need
