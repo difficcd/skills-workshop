@@ -56,10 +56,16 @@ export function takeLock(now = Date.now(), ttl = RUN_TIMEOUT_MS + 60_000) {
     try {
         if (existsSync(LOCK)) {
             const held = JSON.parse(readFileSync(LOCK, 'utf8'));
-            if (now - held.at < ttl) return false;
-            log(`stale lock from pid ${held.pid}, taking over`);
+            // A released lock is `{}`, which is not a stale lock - it is no lock at all. Without
+            // this, `now - undefined` is NaN, `NaN < ttl` is false, and every ordinary start
+            // logged "stale lock from pid undefined, taking over". It took over correctly by
+            // accident, which is the kind of right answer that stops being right later.
+            if (Number.isFinite(held?.at)) {
+                if (now - held.at < ttl) return false;
+                log(`stale lock from pid ${held.pid}, taking over`);
+            }
         }
-    } catch { /* unreadable lock is a stale lock */ }
+    } catch { /* unreadable lock is no lock */ }
     mkdirSync(HOME, { recursive: true });
     writeFileSync(LOCK, JSON.stringify({ pid: process.pid, at: now }));
     return true;
