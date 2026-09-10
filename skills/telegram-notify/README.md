@@ -1,0 +1,169 @@
+# telegram-notify
+
+에이전트가 자리를 비운 사용자에게 **텔레그램으로 한 통 보내는** skill.
+연동 절차, 보내는 기준, 그리고 **"세션이 멈춘 건 아닌지" 를 확인시켜 주는 고정 보고 형식**까지 들어 있다.
+
+> A Claude Code skill for reaching the user on Telegram — setup, send, and a fixed status-report
+> format whose machine-read half answers the question free text cannot: *is this session alive?*
+> Node 18+, zero dependencies. Korean content; the rules are language-independent.
+
+이 스킬의 절반은 **보내는 법**이고 나머지 절반은 **안 보내는 법**이다.
+알림 채널은 에이전트가 사용자에게 닿는 유일한 통로이자, 가장 쉽게 소음이 되는 통로다.
+
+---
+
+## 왜 필요한가
+
+에이전트에게 긴 작업을 맡기고 자리를 뜨면 두 가지가 궁금해진다.
+
+1. **끝났나? 막혔나?** — 터미널을 안 보고 있으면 알 수 없다
+2. **아직 살아 있나?** — 이게 어렵다
+
+2번이 이 스킬의 설계를 결정했다. 자유 서술 보고는 2번에 **답하지 못한다.**
+한 시간째 아무것도 안 움직였어도 "작업 중입니다"라고 쓸 수 있고, 멀쩡한 세션의 보고와 글자 하나 다르지 않다.
+
+그래서 보고의 **절반은 에이전트가 쓰지 않는다.**
+
+```
+🟢 easy-mv-maker · 18:27
+지금: 게이트 통과 후 dev 트리 머지
+직전: #150 커서 8방향
+다음: #137 spine 머지
+⎇ check/all · ● Merge origin/fix/lasso-and-curve (12분 전)   ← 기계가 읽는다
+```
+
+마지막 줄(시각·브랜치·마지막 커밋과 그 나이·미커밋 파일 수)은 `git`과 시계에서 읽는다.
+보고 두 개를 나란히 놓으면, 문장이 뭐라고 하든 **그 사이에 실제로 뭔가 움직였는지**가 드러난다.
+필드를 하나도 안 줘도 이 줄은 나가므로, 인자 없이 부르는 것만으로 "살아 있음"이 증명된다.
+
+막혔을 때는 **글리프 하나만 바뀐다** — 알림 미리보기만 보고 열어볼지 판단할 수 있어야 하기 때문:
+
+```
+🔴 easy-mv-maker · 18:31
+막힘: APK 서명 키 비밀번호 필요
+⎇ check/all · ● … (16분 전)
+```
+
+---
+
+## 설치
+
+폴더를 통째로 복사하면 끝. 빌드도, 패키지도 없다 (Node 18+, 의존성 0).
+
+```bash
+cp -r skills/telegram-notify ~/.claude/skills/
+```
+
+```powershell
+Copy-Item -Recurse skills\telegram-notify "$env:USERPROFILE\.claude\skills\"
+```
+
+다음 세션부터 목록에 뜬다. **"텔레그램 연동해줘"** 한 마디면 에이전트가 알아서 절차를 밟는다.
+
+### 연동 (처음 한 번, 2분)
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/tg-setup.mjs --check   # 이미 되어 있나?
+```
+
+`2`가 나오면:
+
+1. 텔레그램에서 **@BotFather** → `/newbot` → 토큰을 받는다
+2. **새로 만든 봇에게 아무 메시지나 한 번 보낸다** ← 이걸 빠뜨리면 다음 줄이 `no chat found`로 끝난다.
+   봇은 먼저 말을 걸 수 없어서, 사용자가 말을 걸어야 어디로 보낼지 알 수 있다
+3. `node ~/.claude/skills/telegram-notify/scripts/tg-setup.mjs <TOKEN>`
+
+chat id를 자동으로 찾고, 저장하고, **시험 발송까지 해서 끝까지 되는지 증명한다.**
+저장만 되고 못 보내는 상태로 끝나지 않는다. 자세한 절차·오류표는 [`references/setup.md`](references/setup.md).
+
+---
+
+## 쓰기
+
+```bash
+# 상태 보고 (권장)
+node ~/.claude/skills/telegram-notify/scripts/report.mjs --now "빌드 대기" --done "#150 머지"
+node ~/.claude/skills/telegram-notify/scripts/report.mjs --blocked "서명 키 비밀번호 필요"
+node ~/.claude/skills/telegram-notify/scripts/report.mjs --dry          # 보내지 않고 형식만 확인
+
+# 임의 메시지
+node ~/.claude/skills/telegram-notify/scripts/tg.mjs "내용"
+echo "내용" | node ~/.claude/skills/telegram-notify/scripts/tg.mjs
+```
+
+성공하면 `200`만 출력한다.
+
+---
+
+## 구조
+
+```
+skills/telegram-notify/
+├── SKILL.md                  # 에이전트가 읽는 본문 (약 125줄)
+├── references/
+│   ├── setup.md              # 연동 절차 · 종료 코드 · API 오류표
+│   └── reporting.md          # 보고 형식과 필드별 문장 규칙
+└── scripts/                  # Node 18+, 의존성 없음
+    ├── report.mjs            # 고정 형식 상태 보고 (기계가 절반을 채운다)
+    ├── tg.mjs                # 임의 메시지 전송
+    ├── tg-setup.mjs          # 연동 · --check
+    └── tg.sh                 # 전송의 bash 판 (Node를 쓸 수 없을 때)
+```
+
+`SKILL.md`는 우선순위 계층이다.
+
+| 계층 | 내용 |
+|---|---|
+| **P0** | 자동·주기 전송 금지, 토큰을 repo에 두지 않기, 마스킹, 보내기 전 판단, "그만"이면 프로세스까지 죽이기 |
+| **언제** | 세 경우뿐 — 요청받았을 때 / 작업이 멈출 때 / 값어치가 있다고 판단했을 때 |
+| **어떻게** | `report.mjs` 고정 형식, 문장 규칙 |
+| **연동** | `--check` 먼저, 없으면 `references/setup.md` |
+
+---
+
+## P0 — 이 스킬이 막으려는 것
+
+| # | 규칙 |
+|---|---|
+| 0-1 | **자동·주기 전송을 만들지 않는다** — heartbeat, poller, cron, 스케줄러, 전송하는 hook, 반복 감시 태스크 |
+| 0-2 | **토큰을 저장소 안에 두지 않는다** — `~/.claude/local/telegram.env` 한 곳 (`0600`) |
+| 0-3 | 토큰·chat id를 대화에 원문으로 출력하지 않는다 (마스킹된 출력만) |
+| 0-4 | 보내기 전에 사용자 입장에서 읽는다 — 진행 중계 금지 |
+| 0-5 | "그만 보내"면 **프로세스까지 죽인다** |
+
+### 0-1과 0-5는 같은 사고에서 나왔다
+
+주기 보고를 한번 붙였다가 끄는 과정에서 실제로 벌어진 일:
+**heartbeat·poll 스크립트를 삭제한 뒤에도 메시지가 몇 시간 더 갔다.**
+셸이 파일 내용을 이미 메모리에 읽어둔 채 프로세스가 여러 개 살아 있었기 때문이다.
+
+**파일 삭제 ≠ 중지.** `SKILL.md`에 프로세스를 찾아 죽이는 명령이 OS별로 들어 있다.
+
+> N분마다 오는 "지금 X 하는 중"은 정보가 아니라 소음이다.
+> 판단 기준 한 줄: **사용자가 자리를 비운 사이에 알았더라면 행동이 달라졌을 내용인가.**
+
+---
+
+## 이식
+
+자격증명은 `~/.claude/local/telegram.env` 하나뿐이고 프로젝트와 무관하다.
+
+| 상황 | 할 일 |
+|---|---|
+| 새 프로젝트 | 없음 |
+| 새 머신 | 그 파일만 만들면 된다 (설정 재실행 또는 복사) |
+| 프로젝트마다 다른 봇 | 환경변수 `TG_TOKEN` / `TG_CHAT` 이 파일보다 우선 |
+| CI · 컨테이너 | 같은 환경변수 주입. 파일 없이 동작 |
+| 파일 위치 변경 | `TG_ENV_FILE` |
+
+---
+
+## 다른 메신저로 바꾸려면
+
+`scripts/tg.mjs`의 `send()` 하나만 갈아끼우면 된다 —
+Slack이든 Discord webhook이든 `{ ok, status, body }`만 돌려주면 `report.mjs`는 그대로 동작한다.
+형식·판단 기준·P0는 채널과 무관하다.
+
+## 라이선스
+
+[MIT](../../LICENSE)

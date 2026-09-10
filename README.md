@@ -10,6 +10,7 @@ Personal skills for Claude Code.
 | 스킬 | 내용 |
 |---|---|
 | [**monotone-accent-ui**](skills/monotone-accent-ui/) | 무채색 표면 + 단일 포인트색(액센트)으로 다크/라이트를 함께 지탱하는 UI 시스템. 토큰·액센트 농도 사다리·실측 스케일, 컴포넌트 레시피 14종, 화면 구성 UX 패턴 13종, 의존성 없는 위반 검사기 |
+| [**telegram-notify**](skills/telegram-notify/) | 자리를 비운 사용자에게 텔레그램으로 닿는 통로. 2분 연동(시험 발송까지 자동 검증), 보낼 때/안 보낼 때의 기준, 그리고 **절반을 기계가 채워 "세션이 아직 살아 있나"에 답하는 고정 보고 형식**. Node 18+, 의존성 0 |
 
 ## 설치
 
@@ -17,16 +18,16 @@ Personal skills for Claude Code.
 
 ```bash
 # 모든 프로젝트에서 사용
-cp -r skills/monotone-accent-ui ~/.claude/skills/
+cp -r skills/<skill-name> ~/.claude/skills/
 
 # 특정 프로젝트에서만 사용 (팀과 공유하려면 이쪽)
-cp -r skills/monotone-accent-ui <your-project>/.claude/skills/
+cp -r skills/<skill-name> <your-project>/.claude/skills/
 ```
 
 Windows PowerShell:
 
 ```powershell
-Copy-Item -Recurse skills\monotone-accent-ui "$env:USERPROFILE\.claude\skills\"
+Copy-Item -Recurse skills\<skill-name> "$env:USERPROFILE\.claude\skills\"
 ```
 
 다음 세션부터 스킬 목록에 뜨고, 해당 작업이면 에이전트가 알아서 로드한다.
