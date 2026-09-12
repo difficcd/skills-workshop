@@ -90,7 +90,13 @@ async function main() {
 
         // Into the spool first, acknowledge second. Crashing in between costs a duplicate; the
         // other order costs the message itself.
-        spoolAdd(mine(r.messages, creds.chat), Date.now(), me.n);
+        const ours = mine(r.messages, creds.chat);
+        const spool = spoolAdd(ours, Date.now(), me.n);
+        // Who each one is for, on stderr, so a message that reaches the wrong session can be traced.
+        for (const m of ours) {
+            const e = spool.find(x => x.updateId === m.updateId);
+            log(`spooled #${m.updateId} for ${e && e.to !== undefined ? JSON.stringify(e.to) : 'anyone'}`);
+        }
         const last = Math.max(...r.messages.map(m => m.updateId));
         try { await inbox(creds, last + 1); } catch { }
     }
