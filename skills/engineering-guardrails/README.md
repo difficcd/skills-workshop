@@ -1,47 +1,50 @@
 # engineering-guardrails
 
-**나중에 대규모 리팩토링을 하게 만드는 구조적 부채를 애초에 안 쌓기 위한 규칙.**
+**Rules for not accumulating the structural debt that forces a large refactor later.**
+Korean: [README.ko.md](README.ko.md).
 
-> A Claude Code skill of engineering rules distilled from actually refactoring a 4,300-line React
-> component down. What cost real time was never the length — it was duplicated logic, failures
-> that succeeded silently, and rules nobody checked. Every rule here came from something that
-> actually broke, and most carry a runnable check.
-> Korean content; the rules are language-independent.
+A Claude Code skill of engineering rules distilled from actually refactoring a 4,300-line React
+component down. What cost real time was never the length — it was duplicated logic, failures
+that succeeded silently, and rules nobody checked. Every rule here came from something that
+actually broke, and most carry a runnable check. The rules are language-independent.
 
 ---
 
-## 왜
+## Why
 
-4,300줄짜리 React 컴포넌트를 뜯어내면서 나온 것들이다. 값비쌌던 것은 **길이가 아니었다.**
+These came out of taking apart a 4,300-line React component. The expensive part was **not the
+length.**
 
-- **같은 로직의 사본** — 진짜 버그는 전부 사본을 합치다 나왔다. 타임라인 여백 계산 7벌에서 죽은 휠 줌이,
-  "이 비트맵 디코드됐나" 3벌에서 빈 레이어를 캐시할 수 있는 경로가 나왔다
-- **조용히 성공하는 실패** — 붙여넣기가 에러 없이 증발했다. `patchLayer` 가 id를 못 찾으면 그냥
-  원본을 돌려줬기 때문이다
-- **아무도 확인하지 않는 규칙** — 죽은 import가 33개 쌓여 있었다. 아무것도 안 망가뜨려서 안 보였다
+- **Copies of the same logic** — every real bug surfaced while merging copies. Seven versions of
+  the timeline-margin calculation hid a dead wheel-zoom; three versions of "is this bitmap
+  decoded yet" hid a path that could cache an empty layer
+- **Failures that succeed silently** — a paste evaporated without an error, because `patchLayer`
+  returned the original untouched when it could not find the id
+- **Rules nobody checks** — 33 dead imports had piled up. Nothing broke, so nobody saw them
 
-## 핵심 한 가지: 이음매 비용
+## The one idea: seam cost
 
-**가장 큰 함수가 가장 좋은 이음매인 경우는 드물다.** 어떤 묶음을 뺄 수 있는지는 크기가 아니라
-**자기 것이 아닌 이름을 몇 개 읽는가**로 정해지고, 그건 눈으로 못 센다.
+**The biggest function is rarely the best seam.** Whether a group can be pulled out is decided
+not by its size but by **how many names it reads that are not its own** — and that cannot be
+counted by eye.
 
 ```bash
 node ~/.claude/skills/engineering-guardrails/scripts/seams.mjs src/App.jsx --group tool,setTool,color,brushSize
 ```
 
-같은 파일에서 실측한 값:
+Measured on that file:
 
-| 묶음 | 이름 | 줄 | **읽는 수** | 결론 |
+| Group | Names | Lines | **Reads** | Verdict |
 |---|---|---|---|---|
-| 그리기 | 35 | 598 | **53** | 못 뺌 — 그리기는 원래 전부에 닿는다 |
-| 비트맵 캐시 | 23 | 298 | 19 | 어려움 |
-| 도구 설정 | 28 | 42 | **4** | 뺐음 |
-| 음원 트랙 | 11 | 86 | **4** | 뺐음 |
+| drawing | 35 | 598 | **53** | cannot leave — drawing touches everything by nature |
+| bitmap cache | 23 | 298 | 19 | hard |
+| tool settings | 28 | 42 | **4** | extracted |
+| audio tracks | 11 | 86 | **4** | extracted |
 
-가장 큰 덩어리가 못 나가고, 그 덩어리가 **읽는** 쪽이 나갔다. 그러면 그리기 코드는 그대로인데
-파일에서 이름이 28개 줄어든다.
+The biggest block could not leave; the blocks it **reads** could. The drawing code stays as it
+is, and the file loses 28 names.
 
-## 설치
+## Install
 
 ```bash
 cp -r skills/engineering-guardrails ~/.claude/skills/
@@ -51,42 +54,44 @@ cp -r skills/engineering-guardrails ~/.claude/skills/
 Copy-Item -Recurse skills\engineering-guardrails "$env:USERPROFILE\.claude\skills\"
 ```
 
-Node 18+, 의존성 0.
+Node 18+, zero dependencies.
 
-## 구조
+## Layout
 
 ```
 skills/engineering-guardrails/
-├── SKILL.md                    # P0(부채를 만드는 것) → P1(어디에 둘까) → P2(테스트) → P3(상시 검사)
+├── SKILL.md                    # P0 (what creates debt) → P1 (where things belong) → P2 (tests) → P3 (always-on checks)
+├── README.md · README.ko.md    # this document, English and Korean
 ├── references/
-│   ├── decisions.md            # 값을 치른 결정들 — 조용한 실패 목록, 파생 vs 저장, 리듀서·훅은 언제
-│   └── checks.md               # 검사를 붙이는 법, 기준선, 검사 자체를 검증하는 법
+│   ├── decisions.md            # decisions that were paid for — the silent-failure list, derived vs. stored, when a reducer or a hook
+│   └── checks.md               # how to attach a check, keep a baseline, and verify the check itself
 └── scripts/
-    ├── seams.mjs               # 이음매 비용 측정 — 어디를 자를 수 있나
-    └── unused-imports.mjs      # 죽은 import (중복 import 포함 — 둘 다 "쓰여서" 안 잡히는 것)
+    ├── seams.mjs               # seam-cost gauge — where a file can be cut
+    └── unused-imports.mjs      # dead imports (including duplicates, which both count as "used" and so escape linters)
 ```
 
-## P0 다섯 줄
+## P0 in five lines
 
 | # | |
 |---|---|
-| 0-1 | 같은 로직을 **두 번** 쓰게 되면 그 자리에서 뽑는다 |
-| 0-2 | **조용히 아무것도 안 하는 경로**를 만들지 않는다. 못 하면 말하거나, 막거나, 던진다 |
-| 0-3 | **거울**을 만들지 않는다. 같은 사실을 두 곳에 두지 말고 파생시킨다 |
-| 0-4 | 규칙에는 **실행 가능한 검사**를 붙인다 |
-| 0-5 | **왜인지를 숫자 옆에** 적는다 |
+| 0-1 | The moment the same logic is written **twice**, extract it there and then |
+| 0-2 | Never build a path that **quietly does nothing**. If it cannot act: say so, block, or throw |
+| 0-3 | No **mirrors**. Never hold one fact in two places — derive it |
+| 0-4 | Every rule gets a **runnable check** |
+| 0-5 | Write **why next to the number** |
 
-0-5의 실제 사례: `DECODED_CAP = 120; // 프리페치 윈도보다 커야 함`. 가장 중요한 성질이 줄 끝
-주석이었다. 어기면 축출과 프리페치가 서로 싸우고 **메모리 문제가 아니라 끊김으로 보인다.**
-지금은 테스트다.
+A real case of 0-5: `DECODED_CAP = 120; // must exceed the prefetch window`. The most important
+property in the file was an end-of-line comment. Violate it and eviction fights prefetch — and it
+**shows up as stutter, not as a memory problem.** It is a test now.
 
-## 테스트에 대한 한 가지
+## One thing about tests
 
-**실패할 수 있는지 확인한다.** 함수를 자기 자신의 인라인 버전과 비교하는 테스트를 두 개 짠 적이
-있다. 절대 실패할 수 없었고, 통과하는 것을 보고 검증됐다고 착각했다.
+**Check that it can fail.** Two tests once compared a function with an inline copy of itself.
+They could never fail, and watching them pass was mistaken for verification.
 
-붙인 뒤 일부러 깨뜨려 보고, 그 테스트가 잡는지 본다. 안 잡으면 그건 테스트가 아니다.
+After adding a test, break the thing on purpose and see whether the test catches it. If it does
+not, it is not a test.
 
-## 라이선스
+## License
 
 [MIT](../../LICENSE)

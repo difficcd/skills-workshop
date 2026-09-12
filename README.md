@@ -10,8 +10,8 @@ rather than "keep it clean".
 
 | Skill | What it is |
 |---|---|
-| [**monotone-accent-ui**](skills/monotone-accent-ui/) | A UI system that carries dark and light on neutral surfaces plus one accent colour. Tokens, an accent-intensity ladder, measured scales, 14 component recipes, 13 screen-composition UX patterns, and a dependency-free violation checker |
-| [**engineering-guardrails**](skills/engineering-guardrails/) | Rules for not accumulating the structural debt that forces a large refactor later, extracted while taking apart a 4,300-line component — a **seam-cost gauge**, a list of silent failures, derived vs. stored state, five always-on checks and how to keep a baseline |
+| [**monotone-accent-ui**](skills/monotone-accent-ui/) ([Korean](skills/monotone-accent-ui/README.ko.md)) | A UI system that carries dark and light on neutral surfaces plus one accent colour. Tokens, an accent-intensity ladder, measured scales, 14 component recipes, 13 screen-composition UX patterns, and a dependency-free violation checker |
+| [**engineering-guardrails**](skills/engineering-guardrails/) ([Korean](skills/engineering-guardrails/README.ko.md)) | Rules for not accumulating the structural debt that forces a large refactor later, extracted while taking apart a 4,300-line component — a **seam-cost gauge**, a list of silent failures, derived vs. stored state, five always-on checks and how to keep a baseline |
 | [**telegram-notify**](skills/telegram-notify/) ([Korean](skills/telegram-notify/README.ko.md)) | **Leave the computer on and run its sessions from your phone.** The agent reports, you answer with instructions, you pick a session by number (`1 …`, `1,3 …`, `* …`), and an idle session wakes when a message arrives. Two-minute setup, the rules for when to send and when not to, a **status-report format half-filled by a machine so it answers "is this session still alive?"**, and measured overhead. Node 18+, zero dependencies |
 
 ## Install
