@@ -25,6 +25,7 @@ import { pathToFileURL } from 'node:url';
 import { credentials } from './tg.mjs';
 import { mode, getKey } from './mode.mjs';
 import { probe } from './reachability.mjs';
+import { activity, projectKey } from './route.mjs';
 
 const SCRIPTS = join(homedir(), '.claude', 'skills', 'telegram-notify', 'scripts');
 const SETTINGS = join(homedir(), '.claude', 'settings.json');
@@ -80,6 +81,10 @@ export function status() {
         hooks: !!st?.hooks?.Stop,
         sessionStart: JSON.stringify(st?.hooks?.SessionStart || '').includes('session-start.mjs'),
         watcher: getKey('TG_WATCH') === '1',
+        // The session map reads "open / closed" off the harness's transcript files, which is an
+        // internal the harness never promised. This is how a change to it shows up as one line
+        // here rather than as every session silently reading "(never run)".
+        transcripts: activity().has(projectKey()),
         permissions: want.filter(r => !rules.includes(r)),
         cli: p.cli,
         scheduler: p.scheduler,
@@ -111,6 +116,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
             ? 'watcher on - every new session arms one from the SessionStart hook'
             : 'watcher on but no SessionStart hook to say so. AGENT: merge install.mjs --json hookBlock')
         : 'watcher off - sessions arm it by hand (watch.mjs --on to change)'));
+    console.log(step(s.transcripts, '3c', s.transcripts
+        ? 'session map can see this session - transcripts are where route.mjs expects them'
+        : 'no transcript found for this directory. Fine if no agent has run here yet; otherwise the '
+        + 'harness moved its transcripts and every session will read "(never run)" - fix route.mjs PROJECTS'));
     console.log(step(s.permissions.length === 0, 4, s.permissions.length === 0
         ? 'permissions granted'
         : `${s.permissions.length} permission rule(s) missing - USER: paste \`install.mjs --perms\` into ~/.claude/settings.json`));

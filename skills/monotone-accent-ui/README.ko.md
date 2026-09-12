@@ -49,7 +49,8 @@ node ~/.claude/skills/monotone-accent-ui/references/verify.mjs src
 
 ```
 skills/monotone-accent-ui/
-├── SKILL.md                      # 에이전트가 항상 읽는 본문 (약 140줄)
+├── SKILL.md                      # 에이전트가 항상 읽는 본문 (약 150줄, 영어)
+├── test/                         # node --test skills/monotone-accent-ui/test/*.test.mjs — 검사기 자체의 검사
 └── references/                   # 필요할 때만 여는 파일
     ├── tokens.css                # 토큰 + 기본 컴포넌트 CSS (복붙용)
     ├── theme.js                  # 액센트 대비색 자동 계산 · 테마 적용

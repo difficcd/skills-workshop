@@ -71,7 +71,7 @@ async function main() {
             now: msgs.length ? 'reading what you just sent' : '',
             note: msgs.length ? '' : undefined,
         });
-        try { await (await import('./tg.mjs')).send(text, creds); } catch { }
+        try { await tg.send(text, creds); } catch { }
     }
 
     if (!msgs.length) out({ suppressOutput: true });

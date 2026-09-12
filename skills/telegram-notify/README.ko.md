@@ -237,7 +237,7 @@ id>.jsonl` 에 기록을 남기고 작업하면서 그 파일을 건드리므로
 낫고, 침묵이야말로 이 스킬이 막으려는 실패다.
 
 ```bash
-node --test skills/telegram-notify/test/route.test.mjs    # 테스트 22개
+node --test skills/telegram-notify/test/route.test.mjs    # 테스트 24개
 ```
 
 ## 감시자 — 메시지가 놀고 있는 세션을 깨운다
@@ -421,6 +421,7 @@ skills/telegram-notify/
 ├── SKILL.md                  # 에이전트가 읽는 본문
 ├── README.md · README.ko.md  # 이 문서, 영어와 한국어
 ├── references/
+│   ├── design.md             # 긴 판 — 각 규칙이 왜 그런지, 사고 이력과 함께
 │   ├── setup.md              # 연동 절차 · 종료 코드 · API 오류표
 │   ├── reporting.md          # 보고 형식과 필드별 문장 규칙
 │   └── reachability.md       # 세션이 끝난 뒤에도 닿기 — 후보 4개와 기준

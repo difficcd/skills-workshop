@@ -1,154 +1,154 @@
 ---
 name: monotone-accent-ui
-description: 무채색 표면 + 단일 포인트색(액센트) 기반 다크/라이트 UI 시스템. LOAD WHEN — UI 컴포넌트 생성·수정, CSS/스타일/레이아웃 변경, 인터랙션 동작 변경, 팝업·모달·토스트, 폼·입력 변경, 테마/다크모드 대응, "가시성·강조" 조정 요청. DO NOT LOAD — 백엔드 전용, API/스키마 전용, 알고리즘, UI 변화 없는 데이터 마이그레이션, 문서 작업.
+description: Dark/light UI system built on neutral surfaces plus one accent colour. LOAD WHEN — creating or changing a UI component; CSS/style/layout changes; changing interaction behaviour; popups, modals, toasts; form or input changes; theme/dark-mode support; any "make it more visible / stand out" request. DO NOT LOAD — backend-only work, API/schema-only work, algorithms, data migrations with no UI change, documentation work.
 ---
 
-# 무채색 + 단일 액센트 UI
+# Neutral surfaces + one accent
 
-규칙은 **P0 → P3 순으로 우선**한다. 충돌하면 항상 낮은 번호가 이긴다.
-값·구현 코드는 `references/`에 있다. **필요한 것만 열어라** (전부 읽지 말 것).
-
----
-
-## SCOPE RULE — 모든 규칙보다 먼저
-
-- 요청을 만족시키는 데 **필요한 표면만** 수정한다. 인접 UI를 기회주의적으로 리디자인하지 않는다.
-- 위치가 지정된 요청이면, **구조 이동이 반드시 필요한 경우가 아닌 한 기존 레이아웃을 보존**한다.
-- "버튼 하나 추가" 요청에 spacing 정리·radius 통일·색 개선·모바일 대응을 얹지 않는다.
-- 애니메이션·기하학적 배치·참조 이미지 기반 요청이 **2가지 이상으로 해석되면 추측 구현 금지** — 질문하거나 변형 2~3개를 제시한다.
+Rules take priority **P0 → P3**. On conflict, the lower number always wins.
+Values and implementation code live in `references/`. **Open only what you need** (do not read all of it).
 
 ---
 
-## P0 — 위반 금지 (디자인 품질보다 우선)
+## SCOPE RULE — before every other rule
 
-| # | 규칙 | 위반 시 결과 |
+- Change **only the surfaces the request needs**. Do not opportunistically redesign neighbouring UI.
+- When the request names a location, **keep the existing layout** unless a structural move is genuinely required.
+- "Add one button" does not come with spacing cleanup, radius unification, colour improvements or mobile fixes.
+- If an animation, geometric placement or reference-image request **reads two or more ways, do not guess** — ask, or offer two or three variants.
+
+---
+
+## P0 — never (above design quality)
+
+| # | Rule | What breaks |
 |---|---|---|
-| 0-1 | **기존 데이터를 삭제·덮어쓰지 않는다.** 파괴적 동작(초기화·정리·일괄 이동)은 실행 전 스냅샷을 남기고 같은 자리에 `되살리기 N` 버튼을 띄운다 | 사용자 기록 유실 |
-| 0-2 | **상시 양방향 미러링을 만들지 않는다.** 원본이 바뀔 때마다 대상을 지우고 재생성하는 구조는 사용자가 대상 쪽에서 고친 내용을 계속 덮어쓴다 → **버튼을 누른 순간 1회 추가**만, 기존 항목은 건드리지 않는다(중복은 id·텍스트로 차단) | 편집 내용이 계속 되돌아감 |
-| 0-3 | **네이티브 브라우저 UI 금지**: `prompt/alert/confirm`, `<select>`, `input[type=number\|date\|time\|color\|checkbox]`, textarea 리사이즈 핸들 | 테마 붕괴 + 플랫폼별 동작 차이 |
-| 0-4 | **기존 인터랙션을 깨뜨리지 않는다.** 새 핸들러·오버레이·제스처가 기존 클릭·포커스·드래그를 삼키지 않는지 확인 | 조용한 회귀 |
-| 0-5 | **요청 안 된 리디자인 금지** (SCOPE RULE) | 신뢰 상실 + 리뷰 불가 |
-| 0-6 | 구조 변경·데이터 마이그레이션 전 **커밋/백업** | 되돌릴 수 없음 |
+| 0-1 | **Never delete or overwrite existing data.** Before a destructive action (reset, clean-up, bulk move) take a snapshot and show an `Undo N` button in the same place | The user's records are gone |
+| 0-2 | **Never build a standing two-way mirror.** A structure that wipes and regenerates the target every time the source changes keeps overwriting what the user fixed on the target side → **add once, on the click**, leave existing items alone (block duplicates by id or text) | Edits keep reverting |
+| 0-3 | **No native browser UI**: `prompt/alert/confirm`, `<select>`, `input[type=number\|date\|time\|color\|checkbox]`, textarea resize handles | Theme collapse + per-platform behaviour |
+| 0-4 | **Never break an existing interaction.** Check that a new handler, overlay or gesture does not swallow existing clicks, focus or drags | Silent regression |
+| 0-5 | **No unrequested redesign** (SCOPE RULE) | Lost trust + unreviewable diff |
+| 0-6 | **Commit or back up** before a structural change or data migration | Cannot be undone |
 
 ---
 
-## P1 — 디자인 시스템 (값)
+## P1 — the design system (values)
 
-**한 줄**: 표면은 전부 무채색, 강조는 오직 액센트 하나. 색을 늘려 구분하지 말고 **농도·크기·테두리**로 구분한다.
+**One line**: every surface is neutral; emphasis is the one accent and nothing else. Do not add colours to distinguish things — distinguish by **intensity, size and border**.
 
-- 원색(초록=성공, 빨강=위험)을 새로 도입하지 않는다. 위험도 액센트 solid로 표현한다.
-- 액센트 배경 위 글자·아이콘은 **무조건 `var(--accent-contrast)`** (`#fff` 하드코딩 금지). 이 값은 휘도로 자동 계산한다 → `references/theme.js`
-- **다크 전용 색 금지**: `rgba(255,255,255,0.05)`는 라이트에서 사라진다 → `color-mix(in srgb, var(--text-main) 5%, transparent)`
-- 토큰 전체(다크/라이트 팔레트 + 포인트색 8종) → `references/tokens.css`
+- Do not introduce primaries (green = success, red = danger). Danger is solid accent too.
+- Text and icons on an accent background are **always `var(--accent-contrast)`** (never a hard-coded `#fff`). It is computed from luminance → `references/theme.js`
+- **No dark-only colours**: `rgba(255,255,255,0.05)` vanishes in light → `color-mix(in srgb, var(--text-main) 5%, transparent)`
+- The full token set (dark/light palettes + 8 accent colours) → `references/tokens.css`
 
-### "가시성 높여줘" = 크기·대비·테두리·농도를 올리라는 뜻
-색을 빨강 등으로 바꾸는 게 **아니다**. 해법은 항상 solid accent 배경 + `--accent-contrast` 글자, 또는 accent 테두리.
+### "Make it more visible" means raise size, contrast, border or intensity
+It does **not** mean change the colour to red. The answer is always a solid accent background + `--accent-contrast` text, or an accent border.
 
-### 액센트 농도 사다리 — `color-mix(in srgb, var(--accent-color) N%, transparent)`
+### The accent-intensity ladder — `color-mix(in srgb, var(--accent-color) N%, transparent)`
 
-| N | 용도 |
+| N | Use |
 |---|---|
-| 4–8% | 블록/섹션 배경 tint |
-| 12–16% | 아이콘 칩 배경, **선택된 행** 배경 |
-| 20–26% | 카운트 뱃지, 진행 중간 단계 |
-| 30–45% | 테두리 강조(30%), 점선 테두리·추가 버튼(45%) |
-| 55–70% | 강한 테두리 |
-| **100% solid + `--accent-contrast`** | 활성·선택·강조의 **종점**. 강조 목적 UI는 여기서 시작 |
+| 4–8% | block / section background tint |
+| 12–16% | icon-chip background, **selected row** background |
+| 20–26% | count badge, intermediate progress step |
+| 30–45% | emphasised border (30%), dashed border · add button (45%) |
+| 55–70% | strong border |
+| **100% solid + `--accent-contrast`** | the **end point** of active / selected / emphasised. UI whose purpose is emphasis starts here |
 
-반투명 8~14%는 배경 전용. 강조로 쓰면 "안 보인다" 피드백이 반드시 돌아온다.
+8–14% translucency is background only. Used for emphasis, the feedback "I can't see it" always comes back.
 
-### 스케일
+### Scales
 
-| 축 | 값 |
+| Axis | Values |
 |---|---|
-| radius | `50%` 원형 · `6–8px` 작은 컨트롤/입력 · `10–12px` 내부 블록 · `14–16px` 강조 블록 · `18–22px` 패널 · `999px` 알약 |
-| font-size | `0.62–0.68rem` 뱃지/메타 · `0.7–0.78rem` 보조 라벨 · `0.8–0.86rem` 본문 · `0.9–1.05rem` 카드 제목 · `1.15rem+` 섹션 제목 |
-| font-weight | `600` 본문 강조 · `700` 라벨 · `800` 제목 기본 · `900` 뱃지·숫자 (얇은 폰트 금지) |
-| gap | `0.3–0.4rem` 아이콘+텍스트 · `0.5–0.6rem` 행 요소 · `0.7–1rem` 블록 |
-| padding | 미니 컨트롤 `0.26rem 0.62rem` · 기본 버튼 `0.5rem 1.1rem` · 카드 `1.1–1.3rem` · 섹션 `1.75rem` |
-| 아이콘 | `10–13` 인라인/뱃지 · `14–16` 버튼 · `17–18` 섹션 헤더 · `20–24` 히어로 |
-| transition | `all 0.2s` 기본, `0.15s` 미세 |
-| 숫자 | `fontVariantNumeric: 'tabular-nums'` |
+| radius | `50%` circles · `6–8px` small controls / inputs · `10–12px` inner blocks · `14–16px` emphasised blocks · `18–22px` panels · `999px` pills |
+| font-size | `0.62–0.68rem` badges / meta · `0.7–0.78rem` secondary labels · `0.8–0.86rem` body · `0.9–1.05rem` card titles · `1.15rem+` section titles |
+| font-weight | `600` body emphasis · `700` labels · `800` default headings · `900` badges / numbers (no thin weights) |
+| gap | `0.3–0.4rem` icon + text · `0.5–0.6rem` items in a row · `0.7–1rem` blocks |
+| padding | mini control `0.26rem 0.62rem` · default button `0.5rem 1.1rem` · card `1.1–1.3rem` · section `1.75rem` |
+| icons | `10–13` inline / badge · `14–16` button · `17–18` section header · `20–24` hero |
+| transition | `all 0.2s` default, `0.15s` fine |
+| numbers | `fontVariantNumeric: 'tabular-nums'` |
 
-컴포넌트별 완성 스타일(버튼·알약·뱃지·패널·선택/드롭 상태) → `references/recipes.md`
+Finished per-component styles (button, pill, badge, panel, selected / drop states) → `references/recipes.md`
 
-### 화면 구성 원칙 (UX)
+### Screen composition (UX)
 
-새 화면·블록·흐름을 만들 때는 아래 5개를 지키고, 구체 패턴은 `references/ux-patterns.md`를 연다.
+When building a new screen, block or flow, keep the five below and open `references/ux-patterns.md` for the concrete patterns.
 
-1. **"지금"이 1급 시민** — 오늘·현재 시각·임박한 것이 첫 화면 위쪽. 저장된 스크롤·선택보다 우선.
-2. **수집 → 실행 → 보관 분리** — 아무 때나 적는 수집함, 오늘 것만 남는 실행 영역, 지나간 것이 쌓이는 보관소. 사용자는 옮기기만 한다.
-3. **모든 블록은 자급자족 카드** — 카드마다 자기 추가 입력과 액션을 갖는다. 다른 화면으로 보내지 않는다.
-4. **삭제 대신 이동·보관** — 파괴적 동작을 기본 동선에서 뺀다(어제로 보내기·아카이브·숨기기).
-5. **빈 상태가 다음 행동을 지시** — "데이터 없음"이 아니라 "★를 눌러 오늘 할 일을 골라보세요".
+1. **"Now" is a first-class citizen** — today, the current time, what is imminent go at the top of the first screen. Ahead of any saved scroll or selection.
+2. **Separate collect → act → archive** — an inbox you write to any time, an action area holding only today's items, an archive where the past accumulates. The user only moves things.
+3. **Every block is a self-sufficient card** — each card carries its own add input and actions. Never send the user to another screen.
+4. **Move or archive instead of delete** — take destructive actions out of the main path (send to yesterday, archive, hide).
+5. **The empty state tells the next action** — not "no data" but "press ★ to pick today's tasks".
 
 ---
 
-## P2 — 구현 패턴
+## P2 — implementation patterns
 
-각 항목의 **Rule / USE / 구현 / WHY** 전문은 `references/recipes.md`. 여기서는 무엇이 있는지만.
+The full **Rule / USE / implementation / WHY** of each item is in `references/recipes.md`. This is only the index.
 
-| 상황 | 규칙 (한 줄) |
+| Situation | Rule (one line) |
 |---|---|
-| 팝업·날짜·시간 선택 | body 포털 + `position: fixed` + 뷰포트 보정. 상위 `overflow`에 잘리면 버그 |
-| 확인 대화상자 | 인라인 2단계 — 첫 클릭에 solid accent `삭제?`, 한 번 더 눌러야 실행 |
-| 숫자 입력 | `type="text" inputMode="numeric"` + 숫자만 필터. 스피너·휠·↑↓가 값을 몰래 바꾼다 |
-| 드래그 | 드래그 상태를 `useState`로 두면 인라인 컴포넌트가 remount되어 드래그가 끊긴다 → `useRef` + DOM style 직접 조작 |
-| 제스처 시작 | `if (e.target.closest('button, a, input')) return;` — 자식 버튼의 클릭을 삼킨다 |
-| 인라인 편집 키 | 같은 항목이 두 목록에 렌더되면 `id`만으로는 입력창이 두 개 뜬다 → `` `${listKind}:${id}` `` |
-| 다중 선택 | Shift=범위(보이는 순서, 기준점 유지) · Ctrl/Cmd=개별 · Esc=해제 · 묶음 내부 드롭은 무시 |
-| 텍스트 입력 | 내용 따라 자동 높이(scrollHeight), 새로고침 후에도 유지 |
-| 연속 입력 | Enter 추가 후 입력창 유지(연타), Esc 취소, blur는 작성 중이던 값을 커밋 |
-| 자동 표시 | 자동으로 뜨는 모든 것에 억제 옵션("오늘 하루 안 보기") |
-| 상태 기억 | 뷰 모드·선택·스크롤은 저장하되, 시간축이 있는 화면은 저장값보다 **현재 시점(오늘·지금)** 이 우선 |
-| 주기 초기화 | 마운트 1회 + 60초 간격 + 탭 복귀로 경계(날짜 등) 확인. 같은 구간이면 저장 함수를 호출조차 않는다(쓰기 0). 첫 실행은 기준값만 기록하고 기존 데이터는 건드리지 않는다 |
-| 레이아웃 | 중간에서 끊기면 안 되는 라벨(CJK·합성어)은 `nowrap`, 버튼 묶음 `flexWrap`, 그리드 자식 `min-width: 0`, 넓은 표는 `overflow-x: auto` |
-| 접근성 | 인터랙티브 히트 영역 ≥24px, 포커스 링은 accent outline, `prefers-reduced-motion` 존중 |
+| Popups, date and time pickers | body portal + `position: fixed` + viewport correction. Clipped by an ancestor's `overflow` is a bug |
+| Confirmation dialogs | inline two-step — first click shows solid accent `Delete?`, second click executes |
+| Numeric input | `type="text" inputMode="numeric"` + digits-only filter. Spinners, wheel and ↑↓ change the value silently |
+| Drag | drag state in `useState` remounts an inline component and the drag breaks → `useRef` + direct DOM style |
+| Gesture start | `if (e.target.closest('button, a, input')) return;` — otherwise it swallows the child button's click |
+| Inline-edit keys | the same item rendered in two lists opens two editors under `id` alone → `` `${listKind}:${id}` `` |
+| Multi-select | Shift = range (visible order, anchor kept) · Ctrl/Cmd = toggle · Esc = clear · a drop inside the group is ignored |
+| Text input | auto height from content (scrollHeight), kept after reload |
+| Rapid entry | Enter adds and keeps the input (repeat), Esc cancels, blur commits what was being typed |
+| Anything that appears by itself | every auto-shown thing gets a suppress option ("not again today") |
+| Remembered state | save view mode, selection, scroll — but on a screen with a time axis, **the current point (today, now)** wins over the saved value |
+| Periodic reset | once on mount + every 60 s + on tab return, check the boundary (date etc.). Same interval → do not even call the save function (zero writes). First run records the reference value only and leaves existing data alone |
+| Layout | labels that must not break mid-word (CJK, compounds) `nowrap`, button groups `flexWrap`, grid children `min-width: 0`, wide tables `overflow-x: auto` |
+| Accessibility | interactive hit area ≥ 24px, focus ring is an accent outline, respect `prefers-reduced-motion` |
 
 ---
 
-## P3 — QA (실행 가능한 검증)
+## P3 — QA (runnable verification)
 
-**작업 종료 전 실행. 전부 결과 0이어야 한다.**
+**Run before finishing. Every count must be 0.**
 
 ```bash
-node references/verify.mjs src    # 어디서나 (Node만 있으면 됨)
-bash references/verify.sh  src    # bash 환경
+node references/verify.mjs src    # anywhere (Node is enough)
+bash references/verify.sh  src    # bash environments
 ```
 
-둘 중 아무거나. 스크립트를 못 쓰는 상황이면 아래 grep을 직접 실행한다.
+Either one. If neither script can run, run the greps directly.
 
 ```bash
 grep -rn "prompt(\|alert(\|confirm(" src/ --include=*.jsx --include=*.tsx   # 0
 grep -rn 'type="number"\|type="date"\|type="time"\|type="checkbox"' src/    # 0
 grep -rn "<select" src/ --include=*.jsx --include=*.tsx                     # 0
-grep -rn "rgba(255, *255, *255" src/ --include=*.jsx --include=*.tsx        # 0 (다크 전용 색)
-grep -rn "color: *'#fff'\|color: *\"#fff\"" src/                            # 0 (--accent-contrast 써야 함)
+grep -rn "rgba(255, *255, *255" src/ --include=*.jsx --include=*.tsx        # 0 (dark-only colour)
+grep -rn "color: *'#fff'\|color: *\"#fff\"" src/                            # 0 (must be --accent-contrast)
 ```
 
-**눈으로 확인 (자동화 불가)**
+**Check by eye (cannot be automated)**
 
-1. 좁은 폭에서 줄바꿈·잘림 없나
-2. 가장 긴 라벨(번역·CJK 포함)이 버튼을 깨지 않나
-3. **라이트/다크 양쪽** 모두 정상인가
-4. 결과가 스크롤 밖·접힘·`maxHeight` 잘림·미렌더 경로에 숨지 않나
-5. 새 상태의 진입·이탈·표시·복구가 전부 정의됐나
-6. 같은 결함이 다른 표면에도 있나 (인스턴스가 아니라 **범주**를 고쳤나 — 위 grep이 이걸 잡는다)
+1. No wrapping or clipping at narrow widths
+2. The longest label (translations, CJK included) does not break a button
+3. **Both light and dark** are right
+4. The result is not hidden off-scroll, collapsed, clipped by `maxHeight`, or on an unrendered path
+5. Entry, exit, display and recovery of every new state are all defined
+6. Does the same defect exist on another surface — did you fix the **category**, not the instance (the greps above catch this)
 
 ---
 
 ## references/
 
-이 스킬 폴더 안의 파일들이다. 경로는 `<이 SKILL.md가 있는 폴더>/references/…`.
+Files inside this skill folder. The path is `<folder of this SKILL.md>/references/…`.
 
-| 파일 | 언제 열기 |
+| File | When to open |
 |---|---|
-| `tokens.css` | 새 프로젝트에 시스템을 심을 때 (복붙) |
-| `theme.js` | 액센트 대비색 계산·테마 적용부를 만들 때 |
-| `recipes.md` | 컴포넌트를 실제로 그릴 때 (RULE/USE/구현/WHY) |
-| `ux-patterns.md` | **화면·흐름을 설계할 때** — 대시보드 구성, 시간 3구간, 수집→오늘, 전역 검색, 빈 상태 문구 |
-| `verify.mjs` / `verify.sh` | 작업 종료 전 P0·P3 검사 |
-| `project-skill-template.md` | 프로젝트 고유 규칙을 담을 별도 스킬을 만들 때 |
+| `tokens.css` | seeding the system into a new project (copy-paste) |
+| `theme.js` | building the accent-contrast computation and theme application |
+| `recipes.md` | actually drawing a component (RULE / USE / implementation / WHY) |
+| `ux-patterns.md` | **designing a screen or flow** — dashboard composition, the three time zones, collect → today, global search, empty-state copy |
+| `verify.mjs` / `verify.sh` | the P0 · P3 check before finishing |
+| `project-skill-template.md` | making a separate skill for project-specific rules |
 
-프로젝트 고유 정보(재사용 컴포넌트 경로, 화면 목록, 저장소 키, 도메인 상태)는 **이 스킬에 넣지 않는다.**
-`references/project-skill-template.md`를 복사해 `<project>-ui` 스킬을 따로 만들고, 이 스킬과 중복되는 내용은 쓰지 말고 위임한다.
+Project-specific facts (paths to reusable components, screen lists, storage keys, domain state) **do not go in this skill.**
+Copy `references/project-skill-template.md` into a separate `<project>-ui` skill, and delegate to this one rather than repeating it.

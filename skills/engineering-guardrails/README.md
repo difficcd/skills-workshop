@@ -65,9 +65,10 @@ skills/engineering-guardrails/
 ├── references/
 │   ├── decisions.md            # decisions that were paid for — the silent-failure list, derived vs. stored, when a reducer or a hook
 │   └── checks.md               # how to attach a check, keep a baseline, and verify the check itself
-└── scripts/
-    ├── seams.mjs               # seam-cost gauge — where a file can be cut
-    └── unused-imports.mjs      # dead imports (including duplicates, which both count as "used" and so escape linters)
+├── scripts/
+│   ├── seams.mjs               # seam-cost gauge — where a file can be cut · --max-lines budget
+│   └── unused-imports.mjs      # dead imports (including duplicates, which both count as "used" and so escape linters)
+└── test/                       # node --test skills/engineering-guardrails/test/*.test.mjs — each check shown to fail
 ```
 
 ## P0 in five lines

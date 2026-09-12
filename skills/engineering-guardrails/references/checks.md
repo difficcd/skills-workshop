@@ -8,8 +8,14 @@ to distrust it, then you stop looking. What follows is the order that actually w
 ## One command
 
 ```json
-"check": "npm run typecheck && npm test && node scripts/hook-baseline.mjs && node scripts/helper-index.mjs && node scripts/unreachable.mjs && node scripts/unused-imports.mjs && node scripts/i18n-check.mjs && npm run build"
+"check": "npm run typecheck && npm test && node scripts/hook-baseline.mjs && node scripts/helper-index.mjs && node scripts/unreachable.mjs && node ~/.claude/skills/engineering-guardrails/scripts/unused-imports.mjs src && node scripts/i18n-check.mjs && npm run build"
 ```
+
+Of those, `unused-imports.mjs` (and `seams.mjs --max-lines`) come with this skill. The other
+three - `hook-baseline.mjs`, `helper-index.mjs`, `unreachable.mjs`, `i18n-check.mjs` - are
+**yours to write** for the project: they need to know its framework, its helper naming and its
+i18n library, which is why they cannot be shipped generically. Each is fifty to a hundred lines
+of regexes over the source tree; the incident table below says what each has to catch.
 
 Order matters: **cheapest first** — a type error means there is no reason to reach the build. And
 there must be **one thing to remember**. Seven checks are fine; two commands are not.
@@ -46,7 +52,7 @@ git checkout src/core/ids.js
 The same goes for **tests**. Two tests once compared a function against its own inlining. They
 could not fail, and watching them pass felt like verification.
 
-## The five checks and the incident behind each
+## The checks and the incident behind each
 
 | Check | Incident |
 |---|---|

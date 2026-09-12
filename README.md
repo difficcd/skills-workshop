@@ -11,7 +11,7 @@ rather than "keep it clean".
 | Skill | What it is |
 |---|---|
 | [**monotone-accent-ui**](skills/monotone-accent-ui/) ([Korean](skills/monotone-accent-ui/README.ko.md)) | A UI system that carries dark and light on neutral surfaces plus one accent colour. Tokens, an accent-intensity ladder, measured scales, 14 component recipes, 13 screen-composition UX patterns, and a dependency-free violation checker |
-| [**engineering-guardrails**](skills/engineering-guardrails/) ([Korean](skills/engineering-guardrails/README.ko.md)) | Rules for not accumulating the structural debt that forces a large refactor later, extracted while taking apart a 4,300-line component — a **seam-cost gauge**, a list of silent failures, derived vs. stored state, five always-on checks and how to keep a baseline |
+| [**engineering-guardrails**](skills/engineering-guardrails/) ([Korean](skills/engineering-guardrails/README.ko.md)) | Rules for not accumulating the structural debt that forces a large refactor later, extracted while taking apart a 4,300-line component — a **seam-cost gauge**, a list of silent failures, derived vs. stored state, two shipped always-on checks (plus three recipes to write per project) and how to keep a baseline |
 | [**telegram-notify**](skills/telegram-notify/) ([Korean](skills/telegram-notify/README.ko.md)) | **Leave the computer on and run its sessions from your phone.** The agent reports, you answer with instructions, you pick a session by number (`1 …`, `1,3 …`, `* …`), and an idle session wakes when a message arrives. Two-minute setup, the rules for when to send and when not to, a **status-report format half-filled by a machine so it answers "is this session still alive?"**, and measured overhead. Node 18+, zero dependencies |
 
 ## Install
@@ -75,7 +75,20 @@ task calls for it. Usage and customisation are in each skill folder's README.
 - **A priority ladder** — `SCOPE RULE → P0 (never) → P1 (design system) → P2 (implementation patterns) → P3 (QA)`. On conflict, the lower number wins.
 - **Short body, details in `references/`** — `SKILL.md`, which the agent always reads, stays around 150 lines; values, code and recipes live in files opened only when needed.
 - **No project dependencies** — nothing project-specific (paths to reusable components, storage keys, screen lists). That belongs in a separate skill made from `references/project-skill-template.md`.
-- **Verifiable** — not "did you check?" but "does this command exit 0?".
+- **Verifiable** — not "did you check?" but "does this command exit 0?". The repository is held
+  to the same standard: CI runs every skill's tests, the shipped checkers against this tree, and a
+  line budget on every `SKILL.md`.
+
+## Checking a change
+
+```bash
+node --test skills/*/test/*.test.mjs                                   # every skill's tests
+node skills/engineering-guardrails/scripts/unused-imports.mjs skills   # the checkers, on this tree
+node skills/monotone-accent-ui/references/verify.mjs skills --ext=.mjs
+```
+
+Same commands as `.github/workflows/check.yml`. Scripts are LF-only (`.gitattributes`): they
+carry shebangs and run under bash on Windows too.
 
 ## License
 

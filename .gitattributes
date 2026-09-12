@@ -1,0 +1,2 @@
+# Scripts carry shebangs and are run by bash and node on every OS; CRLF breaks both.
+* text=auto eol=lf

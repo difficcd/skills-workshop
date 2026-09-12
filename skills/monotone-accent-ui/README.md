@@ -57,6 +57,7 @@ node ~/.claude/skills/monotone-accent-ui/references/verify.mjs src
 skills/monotone-accent-ui/
 ├── SKILL.md                      # what the agent always reads (about 140 lines)
 ├── README.md · README.ko.md      # this document, English and Korean
+├── test/                         # node --test skills/monotone-accent-ui/test/*.test.mjs — the checker, checked
 └── references/                   # opened only when needed
     ├── tokens.css                # tokens + base component CSS (copy-paste)
     ├── theme.js                  # accent contrast colour computed automatically · theme application

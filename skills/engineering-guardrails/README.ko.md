@@ -59,9 +59,10 @@ skills/engineering-guardrails/
 ├── references/
 │   ├── decisions.md            # 값을 치른 결정들 — 조용한 실패 목록, 파생 vs 저장, 리듀서·훅은 언제
 │   └── checks.md               # 검사를 붙이는 법, 기준선, 검사 자체를 검증하는 법
-└── scripts/
-    ├── seams.mjs               # 이음매 비용 측정 — 어디를 자를 수 있나
-    └── unused-imports.mjs      # 죽은 import (중복 import 포함 — 둘 다 "쓰여서" 안 잡히는 것)
+├── scripts/
+│   ├── seams.mjs               # 이음매 비용 측정 — 어디를 자를 수 있나 · --max-lines 예산
+│   └── unused-imports.mjs      # 죽은 import (중복 import 포함 — 둘 다 "쓰여서" 안 잡히는 것)
+└── test/                       # node --test skills/engineering-guardrails/test/*.test.mjs — 각 검사가 실패할 수 있음을 확인
 ```
 
 ## P0 다섯 줄

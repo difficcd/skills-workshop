@@ -246,7 +246,7 @@ to a process that died and is taken over; if the lock cannot be had at all the w
 unlocked — a duplicate beats silence, and silence is the failure this skill exists to prevent.
 
 ```bash
-node --test skills/telegram-notify/test/route.test.mjs    # 22 tests
+node --test skills/telegram-notify/test/route.test.mjs    # 24 tests
 ```
 
 ## Watcher — a message wakes an idle session
@@ -434,9 +434,10 @@ instead. `-Force` if you really want both, and `Disable-ScheduledTask` while you
 
 ```
 skills/telegram-notify/
-├── SKILL.md                  # what the agent reads
+├── SKILL.md                  # what the agent reads — the rules, ~150 lines
 ├── README.md · README.ko.md  # this document, English and Korean
 ├── references/
+│   ├── design.md             # the long form — why each rule is the way it is, with the incidents
 │   ├── setup.md              # linking procedure · exit codes · API error table
 │   ├── reporting.md          # the report format and per-field wording rules
 │   └── reachability.md       # reaching the machine after the session ends — four candidates and the criteria

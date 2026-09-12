@@ -1,0 +1,49 @@
+# The repo held to its own rules. Every check here is one the skills tell other projects to run;
+# a skill that ships a checker it does not pass is the "index nobody updates" its own P0-4 warns
+# about.
+name: check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: tests
+        run: node --test skills/telegram-notify/test/*.test.mjs skills/engineering-guardrails/test/*.test.mjs skills/monotone-accent-ui/test/*.test.mjs
+
+      - name: unused imports (engineering-guardrails)
+        run: node skills/engineering-guardrails/scripts/unused-imports.mjs skills
+
+      - name: UI P0 violations (monotone-accent-ui)
+        run: node skills/monotone-accent-ui/references/verify.mjs skills --ext=.mjs,.js,.jsx,.tsx
+
+      - name: SKILL.md line budget
+        # The README promises "around 150 lines" for the body the agent reads on every load.
+        # 200 is the ceiling; a skill that needs more moves the rest into references/.
+        shell: bash
+        run: |
+          fail=0
+          for f in skills/*/SKILL.md; do
+            n=$(wc -l < "$f")
+            printf '%4d  %s\n' "$n" "$f"
+            if [ "$n" -gt 200 ]; then echo "::error file=$f::$n lines - over the 200-line budget"; fail=1; fi
+          done
+          exit $fail
+
+      - name: no CRLF in the tree
+        shell: bash
+        run: |
+          if git ls-files -z | xargs -0 grep -lI $'\r' -- 2>/dev/null | grep .; then
+            echo "::error::files with CRLF line endings (see .gitattributes)"; exit 1
+          fi

@@ -78,20 +78,23 @@ is usually doing two jobs. Cutting now is cheaper than measuring later and being
 
 ## P3 — standing checks
 
-Each exists because of one incident.
+Each exists because of one incident. **Two ship with this skill** and work on any JS/TS tree;
+the other three depend on the project's framework and conventions, so they are described here
+and written per project — the recipe for each is in `references/checks.md`.
 
 ```bash
 node ~/.claude/skills/engineering-guardrails/scripts/unused-imports.mjs src server
 node ~/.claude/skills/engineering-guardrails/scripts/seams.mjs <big-file> --max-lines 800
 ```
 
-| Check | What it stops |
-|---|---|
-| **unused-imports** | Dead imports left by extractions. They break nothing, so they are invisible — while making a file's header **lie about what the file needs**. Thirty-three had piled up. It also catches the same name imported twice, which a plain usage check cannot: both copies are "used" |
-| **reachability** | Code left behind when a feature was cut from the UI. A group that only references itself is dead however busy it looks |
-| **helper index** | Reimplementing a helper that exists. A four-thousand-line file does not announce what it already has |
-| **hook-dependency baseline** | Growing stale-closure risk. Do not demand zero — **pin the current count** and fail on growth |
-| **i18n** | Untranslated strings |
+| Check | Ships here | What it stops |
+|---|---|---|
+| **unused-imports** | `scripts/unused-imports.mjs` | Dead imports left by extractions. They break nothing, so they are invisible — while making a file's header **lie about what the file needs**. Thirty-three had piled up. It also catches the same name imported twice, which a plain usage check cannot: both copies are "used" |
+| **line budget** | `scripts/seams.mjs --max-lines` | A file growing past the point where the seam gauge is still cheap to run |
+| **reachability** | write it (project-specific roots) | Code left behind when a feature was cut from the UI. A group that only references itself is dead however busy it looks |
+| **helper index** | write it (project-specific helpers) | Reimplementing a helper that exists. A four-thousand-line file does not announce what it already has |
+| **hook-dependency baseline** | write it (React only; gist in checks.md) | Growing stale-closure risk. Do not demand zero — **pin the current count** and fail on growth |
+| **i18n** | write it (depends on the i18n library) | Untranslated strings |
 
 **Use baselines.** Demanding zero violations of a codebase that already works gets the check
 turned off. Pinning today's number and failing on growth is what actually holds.

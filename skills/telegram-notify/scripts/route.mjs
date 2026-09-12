@@ -49,12 +49,29 @@ const writeJson = (file, value) => {
 };
 
 /**
+ * One fold for every spelling of a project directory: the path as the agent sees it, the key an
+ * older rule wrote into the registry, and the transcript directory name the harness writes.
+ *
+ * The harness turns **every** character that is not a letter or digit into a dash - separators,
+ * spaces, dots, underscores, and each Hangul syllable - so `C:\Users\me\Desktop\3학년 2학기`
+ * lives under `C--Users-me-Desktop-3---2--`. An earlier version of this key only replaced
+ * separators, so that project keyed as `c-users-me-desktop-3학년 2학기`, never matched its
+ * transcript directory, showed as "(never run)" for ever, and a `*` broadcast skipped it.
+ * Folding both sides the same way is what makes them meet. Runs of dashes are collapsed because
+ * the registry already holds collapsed keys and a collapsed key cannot be un-collapsed.
+ *
+ * The fold is lossy: `Desktop\대학\3` and `Desktop\3` land on one key, so two projects that
+ * differ only in non-Latin characters share a number. That is the same limit the harness's own
+ * directory names have, and a rarer failure than every non-ASCII project reading as closed.
+ */
+export const fold = (s) => s.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
+
+/**
  * A stable id for a project directory. Case and separators are normalised because the same
  * project reaches here as both `C:\...` and `c:/...` depending on who launched the agent, and
  * two ids for one project would mean two numbers for it.
  */
-export const projectKey = (dir = process.cwd()) =>
-    dir.replace(/[\\/:]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
+export const projectKey = (dir = process.cwd()) => fold(dir);
 
 /** The last path segment, which is what the user calls the project. */
 export const projectName = (dir = process.cwd()) => path.basename(dir) || dir;
@@ -94,7 +111,7 @@ function migrate(reg) {
     reg.notes = reg.notes || {};
     const byKey = {}, names = {}, notes = {};
     for (const [raw, n] of Object.entries(reg.byKey || {})) {
-        const key = raw.replace(/-+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
+        const key = fold(raw);
         if (byKey[key] == null || n < byKey[key]) byKey[key] = n;
         if (reg.names[raw]) names[key] = reg.names[raw];
         if (reg.notes[raw]) notes[key] = reg.notes[raw];
@@ -127,14 +144,11 @@ const LIVE_WINDOW_MIN = Number(process.env.CLAUDE_TG_LIVE_MIN || 30);
 /**
  * A transcript directory name, folded onto the same key `projectKey` produces.
  *
- * The encoding puts one dash where each of `\`, `/` and `:` was, so `C:\Users\me\proj` becomes
- * `C--Users-me-proj` - two dashes where `projectKey` collapses a run of separators into one. Both
- * sides are folded here rather than one being decoded from the other, because the directory name
+ * Both sides are folded rather than one being decoded from the other, because the directory name
  * genuinely cannot be decoded: `-` also stands for itself inside project names, so
- * `...-Desktop-my-app-main` is unsplittable. This is the same fold `migrate` applies, which
- * is why an old key and a new one meet in the middle instead of becoming two entries.
+ * `...-Desktop-my-app-main` is unsplittable. See `fold` for what the harness's encoding does.
  */
-const dirKey = (dir) => dir.replace(/-+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
+const dirKey = fold;
 
 /**
  * How long ago each project was last active, keyed the way `projectKey` keys them.
@@ -330,9 +344,9 @@ function withLock(fn, { tries = 40, staleMs = 60_000, waitMs = 25 } = {}) {
         if (held) {
             try { return fn(); } finally { try { fs.unlinkSync(LOCK); } catch { } }
         }
-        // Busy-wait: this contends for milliseconds if at all, and a hook has no time to sleep.
-        const until = Date.now() + waitMs;
-        while (Date.now() < until) { /* spin */ }
+        // A synchronous wait that does not burn a core: nothing ever notifies this buffer, so
+        // the call returns on its timeout. This contends for milliseconds if at all.
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, waitMs);
     }
     return fn();
 }
