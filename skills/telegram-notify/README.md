@@ -1,68 +1,70 @@
 # telegram-notify
 
-**컴퓨터만 켜 두면, 폰의 텔레그램으로 이 머신의 세션들을 관리하고 지시하는** skill.
-자리를 비운 사용자에게 에이전트가 보고하고, 사용자는 답장으로 지시하고, 세션이 여럿이면 번호로
-골라 보내고, 놀고 있는 세션은 메시지가 오는 순간 깨어나 답한다. 연동 절차, 보낼 때와 안 보낼 때의
-기준, 그리고 **"세션이 멈춘 건 아닌지" 를 확인시켜 주는 고정 보고 형식**까지 들어 있다.
+**Leave the computer on and run its agent sessions from your phone.** The agent reports to you
+on Telegram when you are away; you answer with instructions; when several sessions are open you
+pick one by number; an idle session wakes up the moment a message for it arrives. Setup, the
+rules for when to send and when not to, and a fixed status-report format that answers the one
+question free text cannot — *is this session still alive?* — are all included.
 
-> A Claude Code skill that turns Telegram into a two-way link with the sessions on a machine:
-> reports out, instructions in, a number to pick the session, a watcher that wakes an idle one,
-> and a fixed status-report format whose machine-read half answers the question free text
-> cannot: *is this session alive?* Node 18+, zero dependencies. Korean by default; `TG_LANG=en`
-> for English report labels.
-
-양방향 모두 조용하게 만들어져 있다. 보내는 쪽은 손으로, 세 경우에만 — heartbeat 도 주기 보고도
-없다. 받는 쪽은 훅과 세션당 감시자 하나로, 아무도 쓰지 않는 동안엔 비용이 0이다. 에이전트가
-자리를 비운 사용자에게 닿는 유일한 통로는 가장 쉽게 소음이 되는 통로이기도 해서, 이 스킬의 절반은
-**보내고 듣는 법**이고 나머지 절반은 **안 보내는 법**이다.
+Node 18+, zero dependencies. Built for Claude Code; the pieces are plain scripts, see
+[Portability](#portability). 한국어: [README.ko.md](README.ko.md).
 
 ```
-폰                                     컴퓨터 (켜 두기만)
- ?                 ─────────────▶       1 my-app · 2 other-app (closed)
- 1 테스트 돌려서 결과 알려줘 ────▶       세션 1 깨어남 → 실행 → 보고
- * 지금 뭐 해?    ─────────────▶       열린 세션 전부 답함
- ◀──────────────  🟢 my-app · 18:27 지금: 결제 실패 재시도 테스트 작성 …
+phone                                   computer (just switched on)
+ ?                    ───────────▶       1 my-app · 2 other-app (closed)
+ 1 run the tests      ───────────▶       session 1 wakes → runs them → reports
+ * what are you doing ───────────▶       every open session answers
+ ◀───────────────  🟢 my-app · 18:27  now: writing the retry test …
 ```
+
+Both directions are built to be quiet. Sending is by hand and on three occasions only — never a
+heartbeat, never a poll that reports. Receiving goes through two hooks and one watcher per
+session, which cost nothing while nobody writes. The only way an agent can reach a user who has
+walked away is also the easiest way to become noise, so half of this skill is how to send and
+listen; the other half is how not to.
+
+Throughout, `<s>` stands for `~/.claude/skills/telegram-notify/scripts`.
 
 ---
 
-## 왜 필요한가
+## Why the report looks like this
 
-에이전트에게 긴 작업을 맡기고 자리를 뜨면 두 가지가 궁금해진다.
+Hand an agent a long job and walk away, and two things nag:
 
-1. **끝났나? 막혔나?** — 터미널을 안 보고 있으면 알 수 없다
-2. **아직 살아 있나?** — 이게 어렵다
+1. **Is it done? Is it stuck?** — you cannot tell without the terminal
+2. **Is it still alive?** — this is the hard one
 
-2번이 이 스킬의 설계를 결정했다. 자유 서술 보고는 2번에 **답하지 못한다.**
-한 시간째 아무것도 안 움직였어도 "작업 중입니다"라고 쓸 수 있고, 멀쩡한 세션의 보고와 글자 하나 다르지 않다.
-
-그래서 보고의 **절반은 에이전트가 쓰지 않는다.**
+The second decided the design. A free-text report **cannot answer it**: "working on it" can be
+written after an hour of nothing, and reads exactly like the same words from a healthy session.
+So **half of every report is not written by the agent:**
 
 ```
 🟢 my-app · 18:27
-지금: 결제 실패 재시도 테스트 작성
-직전: 로그인 폼 검증 추가
-다음: 결제 화면 리팩토링
-⎇ feat/checkout · ● 결제 실패 재시도 (12분 전) · 미커밋 3   ← 기계가 읽는다
+now:  writing the retry test for failed payments
+done: login form validation
+next: refactor the checkout screen
+⎇ feat/checkout · ● retry failed payments (12m ago) · 3 uncommitted   ← read by a machine
 ```
 
-마지막 줄(시각·브랜치·마지막 커밋과 그 나이·미커밋 파일 수)은 `git`과 시계에서 읽는다.
-보고 두 개를 나란히 놓으면, 문장이 뭐라고 하든 **그 사이에 실제로 뭔가 움직였는지**가 드러난다.
-필드를 하나도 안 줘도 이 줄은 나가므로, 인자 없이 부르는 것만으로 "살아 있음"이 증명된다.
+The last line — time, branch, last commit and its age, uncommitted file count — comes from `git`
+and the clock. Put two reports side by side and, whatever the sentences say, it is visible
+whether anything actually moved between them. The line goes out even when no field is given, so
+calling the script with no arguments is itself proof of life.
 
-막혔을 때는 **글리프 하나만 바뀐다** — 알림 미리보기만 보고 열어볼지 판단할 수 있어야 하기 때문:
+When the agent is blocked, **one glyph changes**, because the notification preview has to be
+enough to decide whether to open it:
 
 ```
 🔴 my-app · 18:31
-막힘: 배포 서명 키 비밀번호 필요 — 사용자만 알고 있음
-⎇ feat/checkout · ● 결제 실패 재시도 (16분 전)
+blocked: passphrase for the signing key — only you have it
+⎇ feat/checkout · ● retry failed payments (16m ago)
 ```
 
 ---
 
-## 설치
+## Install
 
-폴더를 통째로 복사하면 끝. 빌드도, 패키지도 없다 (Node 18+, 의존성 0).
+Copy the folder. No build, no package.
 
 ```bash
 cp -r skills/telegram-notify ~/.claude/skills/
@@ -72,135 +74,142 @@ cp -r skills/telegram-notify ~/.claude/skills/
 Copy-Item -Recurse skills\telegram-notify "$env:USERPROFILE\.claude\skills\"
 ```
 
-다음 세션부터 목록에 뜬다. **"텔레그램 연동해줘"** 한 마디면 에이전트가 알아서 절차를 밟는다.
+Or hand the agent this repository's URL and the skill's name; it will do the same. From the next
+session on, *"set up Telegram"* is enough — the agent follows the checklist.
 
-### 여기서 시작
-
-```bash
-node ~/.claude/skills/telegram-notify/scripts/install.mjs
-```
-
-지금 뭐가 돼 있고 다음 단계가 뭔지 한 번에 보여준다. **USER** 로 표시된 단계는 에이전트가 못 한다 —
-봇 생성은 사람만 할 수 있고, 상시 자동화 설치와 그걸 설치할 권한을 주는 것은 **채팅 메시지가 이 머신에서
-아무거나 실행하지 못하게 막는 바로 그 지점**이기 때문이다. `install.mjs --perms` 가 붙여넣을 권한
-블록을 출력한다(이 스킬 스크립트와 작업 이름 하나만 허용하는 좁은 규칙).
-
-### 연동 (처음 한 번, 2분)
+### Start here
 
 ```bash
-node ~/.claude/skills/telegram-notify/scripts/tg-setup.mjs --check   # 이미 되어 있나?
+node <s>/install.mjs
 ```
 
-`2`가 나오면:
+One screen: what is already true and what the next step is. Steps marked **USER** cannot be done
+by the agent, deliberately — only a person can create a bot, and installing persistent
+automation (or granting the permission to) is exactly the point that keeps a chat message from
+being able to run anything on the machine. `install.mjs --perms` prints the permission block to
+paste: narrow rules that allow this skill's scripts and one named scheduled task, nothing else.
 
-1. 텔레그램에서 **@BotFather** → `/newbot` → 토큰을 받는다
-2. **새로 만든 봇에게 아무 메시지나 한 번 보낸다** ← 이걸 빠뜨리면 다음 줄이 `no chat found`로 끝난다.
-   봇은 먼저 말을 걸 수 없어서, 사용자가 말을 걸어야 어디로 보낼지 알 수 있다
-3. `node ~/.claude/skills/telegram-notify/scripts/tg-setup.mjs <TOKEN>`
+### Link it (once, two minutes)
 
-chat id를 자동으로 찾고, 저장하고, **시험 발송까지 해서 끝까지 되는지 증명한다.**
-저장만 되고 못 보내는 상태로 끝나지 않는다. 자세한 절차·오류표는 [`references/setup.md`](references/setup.md).
+```bash
+node <s>/tg-setup.mjs --check      # already linked?
+```
+
+If that prints `2`:
+
+1. In Telegram, **@BotFather** → `/newbot` → copy the token
+2. **Send the new bot any message** — skip this and the next step ends with `no chat found`. A
+   bot cannot open a conversation; it learns where to write only once you have written to it
+3. `node <s>/tg-setup.mjs <TOKEN>`
+
+That finds the chat id, saves it, and **sends a test message to prove the whole path works** —
+it never leaves you with credentials saved but nothing deliverable. Procedure, exit codes and
+the API error table: [`references/setup.md`](references/setup.md).
+
+That is everything a person has to do: the token, and one message to the bot. Hooks, mode and
+the watcher setting are the agent's to configure (with your approval where the harness asks).
 
 ---
 
-## 쓰기
+## Send
 
 ```bash
-# 상태 보고 (권장)
-node ~/.claude/skills/telegram-notify/scripts/report.mjs --now "테스트 작성" --done "재시도 로직 구현"
-node ~/.claude/skills/telegram-notify/scripts/report.mjs --blocked "서명 키 비밀번호 필요"
-node ~/.claude/skills/telegram-notify/scripts/report.mjs --dry          # 보내지 않고 형식만 확인
+# status report (preferred)
+node <s>/report.mjs --now "writing tests" --done "retry logic"
+node <s>/report.mjs --blocked "need the signing key passphrase"
+node <s>/report.mjs --dry                      # print the format, send nothing
 
-# 임의 메시지
-node ~/.claude/skills/telegram-notify/scripts/tg.mjs "내용"
-echo "내용" | node ~/.claude/skills/telegram-notify/scripts/tg.mjs
+# free text
+node <s>/tg.mjs "text"
+echo "text" | node <s>/tg.mjs
 ```
 
-성공하면 `200`만 출력한다.
+On success the only output is `200`.
 
-## 모드 — 어디로 보고할까
+Labels are Korean by default; `TG_LANG=en` gives `now` / `done` / `next` / `blocked`.
 
-사용자가 **지금 어디에 있느냐**의 문제지 작업의 문제가 아니다.
+## Mode — where reports go
+
+A question of **where the user is right now**, not of the task.
 
 ```bash
-node ~/.claude/skills/telegram-notify/scripts/mode.mjs      # 현재 모드
-node ~/.claude/skills/telegram-notify/scripts/mode.mjs 2    # 설정
+node <s>/mode.mjs        # current mode
+node <s>/mode.mjs 2      # set it
 ```
 
-| 모드 | 터미널 | 텔레그램 | 언제 |
+| Mode | Terminal | Telegram | When |
 |---|---|---|---|
-| **1** | 전부 | **안 보냄** | 자리에 있음. 화면에 이미 있는 걸 또 울릴 이유가 없다 |
-| **2** | 전부 | 중요한 순간에만 | 기본값. 있지만 잠깐 나갈 수 있음 |
-| **3** | **짧게** | 전부 | 나가 있음. 터미널은 줄여 토큰을 아끼고, 보고는 메시지로 |
+| **1** | everything | **nothing** | at the desk — no reason to ring for what is already on screen |
+| **2** | everything | key moments only | default: around, but might step away |
+| **3** | **terse** | everything | away — terminal trimmed to save tokens, reports by message |
 
-모드 1에서는 `tg.mjs` 와 `report.mjs` 가 **보낼 내용을 출력만 하고 종료**한다. 잃는 것도 없고 울리지도 않는다.
+In mode 1, `tg.mjs` and `report.mjs` **print what they would have sent and exit.** Nothing is
+lost, nothing rings.
 
 ---
 
-## 읽기 — 봇은 뒤에서 듣고 있지 않다
+## Read — the bot is not listening in the background
 
-**처음 쓰는 사람이 반드시 알아야 할 것.** 사용자가 봇에게 보낸 메시지는 에이전트가 읽으러 갈 때까지
-조용히 기다린다. 뒤에서 듣고 있으려면 루프가 필요하고, 보내는 루프는 P0-1이 금지한다. 세션 하나를
-열어 둔 채 메시지로 깨우고 싶다면 아래 "감시자" 절.
+**The first thing a new user has to be told.** A message sent to the bot waits quietly until the
+agent goes to read it. Listening in the background needs a loop, and a loop that *sends* is what
+rule P0-1 forbids. (To have one open session woken by a message, see [Watcher](#watcher--a-message-wakes-an-idle-session).)
 
 ```bash
-node ~/.claude/skills/telegram-notify/scripts/tg-read.mjs             # 기다리는 것 보기
-node ~/.claude/skills/telegram-notify/scripts/tg-read.mjs --consume   # 보고 읽음 처리
+node <s>/tg-read.mjs               # what is waiting
+node <s>/tg-read.mjs --consume     # ...and mark it read
 ```
 
-`getUpdates`는 우편함이지 스트림이 아니라서, 늦게 읽는다고 잃는 게 없다.
-이걸 말해주지 않으면 "연동이 안 됐다"로 읽힌다 — 실제로 그렇게 읽혔고, 그래서 이 절이 있다.
+`getUpdates` is a mailbox, not a stream: reading late loses nothing. Left unsaid, this reads as
+"the integration is broken" — which is exactly how a first user reads it.
 
-## 자동 감지는 훅으로 — 습관이 아니라
+## Hooks — detection the harness performs, not a habit the agent keeps
 
-**스킬은 문서다.** 에이전트가 이미 행동할 때 무엇을 할지를 바꿀 뿐, 턴 안에서 수신함을 읽거나 보고를
-보내는 건 아무것도 없다. 그래서 "멈출 때 보내라"는 규칙이 계속 깨졌고 메시지도 안 읽혔다 — 둘 다
-에이전트의 기억력에 달려 있었기 때문이다.
+**A skill is a document.** It changes what the agent does once it is already acting; nothing in
+a turn reads the inbox or sends a report by itself. Anything that depends on the agent
+remembering will eventually not happen.
 
-**훅은 하네스가 실행한다.** `Stop` 에 연결하면:
+**A hook is run by the harness.** Wire two, in `~/.claude/settings.json`:
 
 ```json
-{ "hooks": { "Stop": [{ "hooks": [{ "type": "command",
-  "command": "node ~/.claude/skills/telegram-notify/scripts/stop-hook.mjs", "timeout": 30 }] }] } }
+{ "hooks": {
+  "Stop":         [{ "hooks": [{ "type": "command", "command": "node ~/.claude/skills/telegram-notify/scripts/stop-hook.mjs",     "timeout": 30 }] }],
+  "SessionStart": [{ "hooks": [{ "type": "command", "command": "node ~/.claude/skills/telegram-notify/scripts/session-start.mjs", "timeout": 20 }] }]
+} }
 ```
 
-매번 멈출 때 수신함을 읽고, **모드 3이면** 보고를 보내고, 새 메시지가 있으면 `decision: block` 으로
-돌려줘서 **턴이 끝나지 않고 답하게** 만든다. 무한루프는 불가능하다 — block 전에 메시지를 소비하므로
-다음 stop에서는 수신함이 비어 있다.
+- **Stop** — at every turn end: read the inbox, send the report **in mode 3**, and if anything
+  arrived return `decision: block` with the messages, so the turn **continues and answers** instead
+  of ending on something never seen. It cannot loop: messages are consumed before the block, so
+  the next stop finds an empty inbox. Mode 2 deliberately does not auto-report — the terminal
+  already reached you, and a message on every turn end is the noise P0-1 exists to prevent.
+- **SessionStart** — prints what is already waiting into the new session's context, and, when the
+  watcher setting is on, the instruction to arm the watcher (below).
 
-모드 2는 일부러 자동 보고를 **안 한다.** 터미널이 이미 닿았고, 매 턴 끝마다 메시지를 보내는 것이
-P0-1이 막으려는 그 소음이다.
+Both hooks print nothing and exit 0 on any failure. A broken notifier must never be able to trap
+a session.
 
-`SessionStart` 에는 `session-start.mjs` 를 건다. 새 세션의 컨텍스트에 기다리는 메시지를 찍고,
-감시자 설정이 켜져 있으면 감시자를 켜라는 지시까지 찍는다 (아래 "감시자"):
+---
 
-```json
-{ "hooks": { "SessionStart": [{ "hooks": [{ "type": "command",
-  "command": "node ~/.claude/skills/telegram-notify/scripts/session-start.mjs", "timeout": 20 }] }] } }
-```
+## Several sessions, one bot — put the number first
 
-두 훅 모두 실패하면 아무것도 출력하지 않고 0으로 끝난다 — 고장 난 알림기가 세션을 붙잡아서는 안 된다.
+One chat, one bot, but usually one agent per project, all reading the same inbox — and
+`getUpdates` acknowledges the **whole bot** at once; there is no way to take one message and
+leave another. Without more, whichever session stopped first consumed everything, and a message
+meant for another project was eaten by a session it was not addressed to.
 
-## 세션이 여러 개일 때 — 번호를 앞에 붙인다
-
-봇도 채팅방도 하나인데 에이전트는 프로젝트마다 하나씩 돌아간다. 전부 같은 받은편지함을 읽고,
-텔레그램의 `getUpdates`는 봇 단위로 한 번에 확인 처리된다 — 하나만 가져가고 하나는 남겨두는 게
-불가능하다. 그래서 **먼저 멈춘 세션이 전부 먹어치웠고**, 다른 프로젝트에게 보낸 메시지가 엉뚱한
-세션에게 소비된 뒤 정작 받아야 할 쪽은 영영 보지 못했다.
-
-`route.mjs`가 가장 단순한 방법으로 해결한다. **프로젝트마다 번호를 주고, 사용자가 번호를 맨 앞에
-붙인다.**
+`route.mjs` fixes that with the smallest thing that works: **each project gets a number, and you
+put the number at the front of the message.**
 
 ```
-2 테스트 돌려                  -> 2번 프로젝트에만
-1,3 테스트 돌려                -> 1번과 3번, 각각 한 번씩
-* 테스트 돌려                  -> 그 순간 열려 있는 세션 전부
-테스트 돌려                    -> 먼저 멈추는 세션에게 (세션이 하나면 이게 맞다)
-?                             -> 봇이 목록을 알려준다
+2 run the tests        -> project 2, nowhere else
+1,3 run the tests      -> projects 1 and 3, each once
+* run the tests        -> every session open at that moment
+run the tests          -> whichever session stops first (right when only one is open)
+?                      -> the bot replies with the list
 ```
 
 ```bash
-node ~/.claude/skills/telegram-notify/scripts/route.mjs
+node <s>/route.mjs
 ```
 
 ```
@@ -210,301 +219,300 @@ Put the number first to pick a session:
 3 old-app      (never run)
 ```
 
-번호는 그 프로젝트의 훅이 처음 돌 때 배정되고 재사용되지 않는다 — 한 번 외운 번호는 계속 같은
-프로젝트를 가리킨다. 새 프로젝트가 번호를 가져가는 순간에만 목록이 자동으로 전송된다. 그때가
-사용자가 알던 목록이 낡아지는 유일한 시점이기 때문이다.
+Numbers are handed out the first time a project's hook runs and never reused, so a number you
+have learned keeps pointing at the same project. The list is sent to you automatically only when
+a new project takes a number — the one moment your copy of it went stale.
 
-**열려 있는지 여부는 등록이 아니라 관측이다.** 번호 장부는 늘어나기만 해서, 그대로 두면 목록이
-아무도 작업하지 않는 폴더로 채워지고 며칠 전에 닫힌 세션을 번호가 가리키게 된다 — 그러면 메시지는
-영원히 오지 않을 세션을 기다리며 스풀에 남는다. 하네스가 이미 답을 적어 둔다: 모든 세션은
-`~/.claude/projects/<인코딩된 cwd>/<세션id>.jsonl` 에 기록을 남기고 작업하면서 그 파일을 건드리므로,
-디렉터리의 최신 mtime 이 그 프로젝트가 마지막으로 움직인 시각이다. 아무것도 자기를 등록하지 않아도
-되고, 죽은 세션은 청소할 상태를 남기지 않는다. 실측: 열린 세션 둘은 0~1분, 닫힌 것들은 전부 50분
-이상 — 신호가 깨끗하게 갈린다.
+**Whether a session is open is observed, not registered.** Every session keeps a transcript at
+`~/.claude/projects/<encoded cwd>/<session id>.jsonl` and touches it as it works, so the newest
+mtime in that directory is when the project last did something. Nothing registers itself, and a
+session that dies leaves nothing to clean up. Measured: open sessions read 0–1 minutes, closed
+ones 50 minutes and up — the signal separates cleanly. Closed rows are **marked, not dropped**:
+a number that vanishes between reading the list and typing it is the one failure the numbers
+exist to prevent.
 
-닫힌 줄은 **지우지 않고 표시만** 한다. 지우면 사용자가 지금 보고 있을 수도 있는 줄이 사라지는데,
-목록을 읽고 번호를 입력하는 사이에 줄이 없어지는 것이 애초에 번호로 막으려던 실패다.
+**A message with no number goes to one session — whichever stops first — not to all of them.**
+Fine with one session open, a coin toss with two; say so to the user once.
 
-**번호를 안 붙인 메시지는 전체가 아니라 "먼저 멈춘 세션 하나"로 간다.** 의도한 동작이다. 대신
-의도하지 않은 세션에 꽂힐 수 있다는 뜻이기도 하다 — 실제로 이 기능을 만든 날 지시 하나가 엉뚱한
-프로젝트로 갔다.
-
-그 아래에서 `stop-hook.mjs`는 받은 편지함을 **스풀 파일**로 옮긴 뒤 자기 몫만 꺼내간다. 열려
-있지 않은 프로젝트의 메시지는 스풀에서 기다리고, 하루가 지나면 버려진다 — 2주 뒤에 난데없이
-튀어나오지 않도록.
-
-수신자가 여럿인 메시지는 마지막 수신자가 가져갈 때까지 스풀에 남고, 각자 한 번씩만 가져간다.
-`*` 는 **스풀에 넣는 순간** 그때 열려 있는 세션들로 확정된다 (스풀에 넣는 세션 자신은 transcript 가
-조용해도 열린 것으로 친다). 그래서 "전부"는 보낸 시점에 있던 전부다 — 내일 여는 세션은 오늘 방송을
-받지 않고, 닫힌 세션을 기다리지도 않는다. 열림 판정은 목록에 표시되는 것과 같은 측정이다.
-
-스풀 작업은 전부 "읽고 → 판단하고 → 다시 쓰기"인데, 두 Stop 훅이 같은 초에 끝날 수 있다. 둘이 같은
-배열을 읽고 나중 쓰기가 이기면 한 세션이 이미 가져간 메시지가 되살아나 **두 번 배달된다.** 원자적
-쓰기로는 못 막고, 다른 독자를 배제해야만 막힌다. `wx`(이미 있으면 실패하는 생성)로 만든 락 파일
-하나로 해결한다. 1분보다 오래된 락은 들고 죽은 프로세스의 것이라 인수하고, 락을 아예 못 잡으면
-**락 없이 그냥 실행한다** — 중복 배달이 침묵보다 낫고, 침묵이야말로 이 스킬이 막으려는 실패다.
+Underneath, hooks and watchers drain Telegram into a **spool file** and take only their own share
+out: messages addressed to their number, `*`, or nobody. A message for several sessions stays
+until the last of them has taken it; `*` is resolved **when the message is spooled**, against the
+sessions open at that moment, so "everyone" means everyone who was there when it was sent. Mail
+for a project that is not open waits up to a day, then is dropped so nothing surfaces out of
+nowhere a fortnight later. Every spool operation is a read-decide-write under an exclusive-create
+lock file (`wx`) — two Stop hooks can end in the same second, and without the lock a message one
+session already took would come back and be delivered twice. A lock older than a minute belonged
+to a process that died and is taken over; if the lock cannot be had at all the work is done
+unlocked — a duplicate beats silence, and silence is the failure this skill exists to prevent.
 
 ```bash
-node --test skills/telegram-notify/test/route.test.mjs    # 테스트 22개
+node --test skills/telegram-notify/test/route.test.mjs    # 22 tests
 ```
 
-## 감시자 — 메시지가 놀고 있는 세션을 깨운다
+## Watcher — a message wakes an idle session
 
-Stop 훅은 **턴이 끝날 때** 수신함을 읽는다. 턴과 턴 사이 — 에이전트가 사용자의 입력을 기다리며
-놀고 있는 동안 — 에는 아무것도 돌지 않으므로, 그때 보낸 메시지는 누군가 터미널에서 엔터를 칠 때까지
-그대로 앉아 있다. 폰에서 보면 대답 없는 봇이다.
+The Stop hook reads the inbox **when a turn ends**. Between turns — the agent idle, waiting for
+you to type — nothing runs, so a message sent then sits until someone presses enter in the
+terminal. From the phone that is a bot that does not answer.
 
-`watch.mjs` 가 그 틈을 **세션 하나에 대해, 세션이 사는 동안** 메운다. 이 세션 앞으로 온 메시지를
-한 줄에 하나씩 출력하는 스크립트인데, 하네스의 **Monitor** 도구 아래에서 돌리면 stdout 한 줄이
-곧 세션을 깨우는 이벤트가 되고, 세션은 그 줄이 터미널에 입력된 것처럼 답한다:
+`watch.mjs` closes that gap **for one session, for as long as it lives**. It prints one line per
+message addressed to this session; run under the harness's **Monitor** tool, each line is an
+event that wakes the session, which then answers as if the line had been typed:
 
 ```
 Monitor({ command: 'node ~/.claude/skills/telegram-notify/scripts/watch.mjs',
           description: 'Telegram messages for this session', persistent: true })
 ```
 
-**켜는 것은 사용자가 아니라 세션의 일이다.** 머신 단위 설정 하나:
+**Arming it is the session's job, not yours.** One setting for the machine:
 
 ```bash
-node ~/.claude/skills/telegram-notify/scripts/watch.mjs --on      # 새 세션마다 시작 시 감시자를 켠다
-node ~/.claude/skills/telegram-notify/scripts/watch.mjs --off     # 다시 수동으로
+node <s>/watch.mjs --on       # every new session arms a watcher at start
+node <s>/watch.mjs --off      # back to arming by hand
+node <s>/watch.mjs --status
 ```
 
-켜져 있는 동안 `SessionStart` 훅(`session-start.mjs`)이 위의 `Monitor(...)` 호출을 그대로 새 세션의
-컨텍스트에 찍어 주고, **세션의 첫 행동이 그것을 실행하는 것**이다 — 사용자의 요청을 읽기 전에, 무엇보다
-먼저. 이것이 "창마다 들으라고 말해 주기"를 한 번 올리는 스위치로 바꾼다. 훅 없이 시작했거나 설정이
-꺼져 있으면, 사용자가 "텔레그램으로 보내겠다"고 할 때 켠다. 세션당 하나면 되고, `persistent: true`
-로 켠다 — 메시지가 언제 오든 거기 있는 것이 목적이니까. 설정과 훅이 맞는지는 `install.mjs` 가 보여 준다.
+While it is on, the SessionStart hook prints the exact `Monitor(...)` call into every new
+session's context, and **the session's first act is to run it** — before reading your request.
+That turns "tell each window to listen" into a switch flipped once. A session that starts without
+the hook, or with the setting off, arms it when you say you will be writing from Telegram.
+`install.mjs` shows whether the setting and the hook agree.
 
+How it works: one `getUpdates` request held open for up to 50 s (Telegram's long poll). Whatever
+arrives goes into the **same spool the hooks use** and is acknowledged; only this session's
+share comes out. The spool is checked on **every pass**, not only after this process fetched
+something — a message for this session may have been fetched by another session's hook or
+watcher, and Telegram will never show it again. What is printed has already left the spool, so
+the next stop does not deliver it twice.
 
-동작 원리: `getUpdates` 요청 하나를 최대 50초 열어 둔다 — 텔레그램의 롱 폴이고, `tg-read.mjs` 의
-`inbox()` 에 붙은 `waitSec` 인자가 그것을 켠다 (다른 호출자는 전부 0, 즉시 반환). 무언가 도착하면
-**Stop 훅과 같은 스풀**에 넣고 확인 처리한 뒤, 이 세션 몫만 꺼낸다 — 자기 번호, `*`, 또는 번호
-없음. 다른 세션 앞으로 온 메시지는 그 세션을 위해 스풀에 남고 이 세션을 깨우지 않는다. 스풀은
-**매 회차** 확인한다 — 이 프로세스가 무언가 받아왔을 때만이 아니라. 이 세션 앞으로 온 메시지를 다른
-세션의 훅이나 감시자가 먼저 받아갔을 수 있고, 텔레그램은 그것을 이 세션에게 다시 보여주지 않기
-때문이다. 출력된 것은 이미 스풀에서 빠졌으므로 다음 Stop 이 다시 배달하지 않는다. 두 번 배달되지도,
-엉뚱한 세션에 가지도 않는다 — 훅이 이미 쓰는 라우팅 코드를 그대로 타기 때문이다.
+The watcher sends nothing on its own account. The one thing it answers is `?`, with the session
+list, when the mode allows sending — a question about the wiring, not worth waking a session
+for. Everything else the session answers itself, with `tg.mjs`.
 
-답은 `tg.mjs` 로 보낸다. 감시자가 스스로 보내는 것은 하나뿐이다 — `?` 에 대한 세션 목록 (모드가
-전송을 허용할 때). 배선에 대한 질문이라 세션을 깨울 가치가 없어서다.
+**Two sessions, two watchers.** Telegram allows one open `getUpdates` per bot; a second watcher
+cuts the first off (`Conflict: terminated by other getUpdates request`). The loser leaves the poll
+to the winner for 15 s and reads the spool every 2 s meanwhile — the winner spools for everyone —
+then asks for the poll again, so a winner that has gone is replaced. Nothing is lost, the loser is
+at most 2 s behind, and two watchers cost four extra requests a minute between them (measured over
+60 s). A session without a watcher still gets its mail at its next stop.
 
-**세션 둘, 감시자 둘.** 텔레그램은 봇당 열린 `getUpdates` 를 하나만 허용한다. 두 번째 감시자가
-첫 번째를 끊는다 — 실측: `Conflict: terminated by other getUpdates request`. 진 쪽은 15초 동안
-폴을 이긴 쪽에 맡기고 대신 2초마다 스풀을 읽는다 — 이긴 쪽이 모두의 몫을 스풀에 넣으니까 — 그 뒤
-다시 폴을 요청해서, 이긴 쪽이 사라졌으면 넘겨받는다. 잃는 것은 없고, 진 쪽은 최대 2초 늦다. 감시자
-둘로 60초 실측: 각각 2번 양보, 합쳐서 분당 4회의 추가 요청. 감시자 없는 세션도 다음 Stop 에서
-메시지를 받는다.
+**Its relation to P0-1.** That rule bans loops that *send*. The watcher is the other direction: a
+wait for receiving. Its idle cost is one open connection, and a quiet day produces zero events.
+It is tied to the session — listed under the harness's tasks, stopped with one call, gone when the
+session ends — so it cannot outlive its owner or multiply, which are the two failures a detached
+shell loop actually has.
 
 ```bash
-node ~/.claude/skills/telegram-notify/scripts/watch.mjs --once   # 첫 메시지 하나 받고 종료: 배선 확인용
-node --test skills/telegram-notify/test/watch.test.mjs             # 테스트 6개
+node <s>/watch.mjs --once                                  # exit after the first message: checks the wiring
+node --test skills/telegram-notify/test/watch.test.mjs     # 6 tests
 ```
 
-## 충돌할 수 있는 세션들
+## Sessions that could collide
 
-한 머신의 두 세션은 서로를 볼 수 없는데, 같은 저장소·같은 파일·같은 포트에 있을 수 있다. 다른
-열린 세션도 건드릴 수 있는 것을 건드리기 전에, 지도를 만남의 장소로 쓴다:
+Two sessions on one machine cannot see each other, and can be in the same repository, on the
+same file, on the same port. The session list is where they meet:
 
 ```bash
-node ~/.claude/skills/telegram-notify/scripts/route.mjs --note "feature/x 를 main 에 리베이스 중"   # 이 세션이 하는 일
-node ~/.claude/skills/telegram-notify/scripts/route.mjs                                            # 다른 세션들은 뭘 한다고 하나
-node ~/.claude/skills/telegram-notify/scripts/route.mjs --tell 2 "package.json 10분만 손대지 마"    # 2번에게 메시지 (`1,3`, `*` 도 됨)
+node <s>/route.mjs --note "rebasing feature/x onto main"     # what this session is doing
+node <s>/route.mjs                                           # what the others say they are doing
+node <s>/route.mjs --tell 2 "hands off package.json, 10 min" # a message for session 2 (`1,3`, `*` too)
 ```
 
-메모는 세션 번호 옆의 한 줄로, 사용자에게는 `?` 에서, 다른 세션에게는 지도에서 보인다. `--note ""`
-로 지운다. `--tell` 로 남긴 메시지는 스풀을 거쳐 사용자의 메시지와 같은 길로 상대 세션에 닿는다 —
-다음 Stop 에서, 감시자가 있으면 즉시 — `(session N)` 표시가 붙어 세션이 보낸 것으로 읽힌다. 방송은
-보낸 세션에게 돌아오지 않는다. 새로 띄울 것은 없다: 이미 있는 우편함이다.
+A note is one line next to the session's number, visible to you on `?` and to every other
+session on the list; `--note ""` clears it. A message left with `--tell` goes through the spool
+and reaches the other session the way yours do — at its next stop, or at once if it has a
+watcher — marked `(session N)` so it reads as coming from a session. A broadcast does not come
+back to its sender. Nothing new runs: it is the mailbox that already exists.
 
-규칙: **충돌할 수 있으면 하는 일을 적고, 충돌하기 전에 지도를 읽고, 필요하면 상대 세션에게 말한다.**
-사용자도 메모를 보고, 그것으로 번호를 고른다.
+The rule for agents: **say what you are doing when it could collide, read the list before you
+collide, and tell the other session when you have to.** You see the notes too — that is how you
+choose a number.
 
-**P0-1 과의 관계.** 그 규칙이 막는 것은 *보내는* 루프다 — heartbeat, 주기 보고, 아무도 묻지 않은
-메시지를 만들어내는 모든 것. 감시자는 반대 방향, **받기 위한 대기**다. 아무것도 보내지 않고, 놀 때의
-비용은 열린 연결 하나이며, 조용한 하루는 이벤트 0개다. 그리고 세션에 묶여 있다 — 하네스의 태스크
-목록에 보이고, `TaskStop` 한 번에 멈추고, 세션이 끝나면 같이 죽는다. 주인보다 오래 살 수도, 여러 개로
-불어날 수도 없다 — 예전 분리된 셸 루프가 실제로 겪은 두 가지 실패가 바로 그것이었다.
+## When a session ends
 
-## 세션이 끝나면
+Everything the skill starts belongs to a session and goes with it:
 
-이 스킬이 띄우는 모든 것은 세션에 속하고, 세션과 함께 사라진다:
+- **The watcher.** The harness kills its monitor tasks when the session ends — observed on every
+  session end so far; no `watch.mjs` has outlived the session that started it. For the end that is
+  not observed (the harness dying without cleaning up), the watcher checks on every pass that the
+  process which started it is still alive, and stops if it is not.
+- **The hooks** run to completion or time out; they hold nothing open.
+- **The spool** drops mail for a session that never comes back after 24 h; a lock left by a dead
+  process is taken over after 60 s.
+- **The registry** keeps the number (so your list stays valid) and marks the row closed from the
+  transcript's age. Nothing to clean up.
 
-- **감시자.** 하네스가 세션 종료 시 모니터 태스크를 죽인다 — 지금까지의 모든 세션 종료에서 관측됨:
-  자신을 띄운 세션보다 오래 사는 `watch.mjs` 프로세스는 없었다. 관측되지 않는 종료(하네스가 정리
-  없이 죽는 경우)를 위해 감시자는 매 회차 자신을 띄운 프로세스가 살아 있는지 확인하고, 없으면 스스로
-  멈춘다. 그래서 깨울 대상 없이 폴을 두고 다투는 일은 생길 수 없다.
-- **훅**은 끝까지 돌거나 타임아웃된다. 아무것도 열어 두지 않는다.
-- **스풀.** 돌아오지 않는 세션의 메시지는 24시간 뒤 버려지고, 죽은 프로세스가 남긴 락은 60초 뒤
-  인수된다.
-- **장부**는 세션 번호를 유지하고(사용자의 목록이 그대로 유효하도록) transcript 나이로 닫힘을
-  표시한다. 치울 것이 없다.
+`ps` / `tasklist` for `watch.mjs` is the whole audit. One left after its session ended is a bug.
 
-`tasklist` / `ps` 로 `watch.mjs` 를 찾는 것이 감사의 전부다. 세션이 끝났는데 남아 있다면 버그다 —
-죽이고 말할 것.
+## What it costs — measured
 
-## 비용 — 실측
+One laptop: Intel Core i5-1340P (12 cores / 16 threads), 16 GB RAM, Windows 11 Pro, Node 22, one
+bot. Network figures are the round trip to `api.telegram.org` from that machine and will differ
+by line; memory and CPU are a Node process's and should be similar anywhere.
 
-실측 환경: 노트북 한 대 — Intel Core i5-1340P (12코어/16스레드), RAM 16 GB, Windows 11 Pro, Node 22.
-봇 하나. 네트워크 수치는 그 머신에서 `api.telegram.org` 까지의 왕복이라 회선마다 다르고, 메모리·CPU 는
-Node 프로세스의 것이라 어디서나 비슷할 것이다.
-
-| 구성요소 | 언제 도는가 | 비용 |
+| Piece | Runs | Cost |
 |---|---|---|
-| 감시자 (`watch.mjs`) | 세션당 프로세스 하나, 세션이 사는 동안 | RSS 50 MB, CPU 분당 47 ms (코어 하나의 0.08 %), 스레드 13, 유지되는 TCP 연결 1개; 유휴 시 50초마다 요청 하나 ≈ 0.8 KB/분 ≈ 1 MB/일; 조용한 날 이벤트 0개 |
-| Stop 훅 (`stop-hook.mjs`) | 턴이 끝날 때마다 한 번 | `node` 기동 (170–190 ms) + `getUpdates` 한 번 (실측 350 ms–3.8 s, 순수 네트워크); 합쳐서 벽시계 1.2–3.1 s, 턴이 이미 끝난 시점에 |
-| SessionStart 훅 (`session-start.mjs`) | 세션당 한 번 | Stop 훅과 같은 모양: 1.2–2.5 s |
-| 목록·설정 명령 (`route.mjs`, `watch.mjs --status`) | 요청 시 | 180–230 ms, 네트워크 없음 |
-| 스풀·장부·락 | 훅이나 감시자의 매 회차 | `~/.claude/local` 의 작은 JSON 파일 셋; 스풀은 밀리초 단위로 잡는 락 아래서 읽고 쓴다 |
-| 세션 *N* 개 | | 감시자 *N* 개 → *N* × 50 MB, *N* × 0.08 % CPU; 폴은 한 번에 하나가 잡고 나머지는 양보(위) — 둘일 때 분당 4회 추가 요청 |
+| Watcher (`watch.mjs`) | one process per session, for its life | 50 MB RSS, 47 ms CPU per minute (0.08 % of one core), 13 threads, one TCP connection kept alive; one request per 50 s while idle ≈ 0.8 KB/min ≈ 1 MB/day; zero events on a quiet day |
+| Stop hook | once per turn end | one `node` start (170–190 ms) + one `getUpdates` (350 ms–3.8 s, pure network); 1.2–3.1 s wall in total, after the turn is already over |
+| SessionStart hook | once per session | same shape: 1.2–2.5 s |
+| List / setting commands | when asked | 180–230 ms, no network |
+| Spool, registry, lock | on every hook or watcher pass | three small JSON files in `~/.claude/local`; the lock is held for milliseconds |
+| *N* sessions | | *N* watchers: *N* × 50 MB, *N* × 0.08 % CPU; one holds the poll, the others yield — two together add four requests a minute |
 
-세션 사이에는 아무것도 돌지 않는다. 텔레그램에 닿지 못한 훅과 감시자는 아무것도 출력하지 않고
-나중에 다시 시도하며, 어느 것도 훅 타임아웃보다 오래 턴을 붙잡을 수 없다.
+Nothing runs between sessions. A hook or watcher that cannot reach Telegram prints nothing and
+retries later; none can hold a turn longer than the hook timeout.
 
 ---
 
-## 메시지로 세션 시작하기 — 세션이 하나도 없을 때
+## Starting a session from a message — when none is open
 
-**"세션 끝나도 되게 해줘"** 는 환경마다 답이 다르다. 추측하지 말고 탐지한다:
-
-```bash
-node ~/.claude/skills/telegram-notify/scripts/reachability.mjs
-```
-
-OS·`claude` CLI·스케줄러·자격증명을 보고 후보 넷을 **확실성과 오버헤드로 채점해서** 하나를 고른다.
-설치는 하지 않는다 — 고르는 건 사용자다. 기준과 근거는 [`references/reachability.md`](references/reachability.md).
-
-훅과 감시자는 **이미 돌고 있는 세션 안에서만** 도움이 된다. 메시지가 세션을 *시작*하게 하려면 아무것도 안 돌 때
-도는 게 있어야 한다 — `bridge.mjs` 를 OS 스케줄러가 부른다.
+*"Make it work after the session ends"* has a different answer on every machine. Probe, do not
+guess:
 
 ```bash
-node ~/.claude/skills/telegram-notify/scripts/bridge.mjs --install   # 설치 명령만 출력
-node ~/.claude/skills/telegram-notify/scripts/bridge.mjs --dry       # 뭘 실행할지만 확인
+node <s>/reachability.mjs
 ```
 
-한 번 읽고, 메시지가 있으면 `claude -p` 로 실행하고, 답을 다시 보낸다. **루프가 아니다** — 한 번
-읽고 끝나므로 주기는 스케줄러가, 끄는 건 OS가 소유한다.
+It reads the OS, the `claude` CLI, the available scheduler and the credentials, scores four
+candidates by **certainty and overhead**, and picks one. It installs nothing — the choice is the
+user's. Criteria and reasoning: [`references/reachability.md`](references/reachability.md).
 
-락 파일(동시 실행 금지), 락을 잡은 뒤에야 소비, 실행 타임아웃 — 각각 실제로 문제가 되는 실패 하나씩을 막는다.
+Hooks and the watcher help only **inside a session that is already running**. For a message to
+*start* one, something has to run when nothing else does: `bridge.mjs`, called by the OS
+scheduler.
 
-윈도우에서는 [`scripts/install-bridge.ps1`](scripts/install-bridge.ps1) 이 작업 설치기다.
-`-WorkDir` 로 어느 디렉터리에서 답할지 정한다.
+```bash
+node <s>/bridge.mjs --install     # prints the install command; installs nothing
+node <s>/bridge.mjs --dry         # what it would run
+```
+
+One poll: read the inbox, and if anything arrived, run `claude -p` on it and send the answer
+back. **It is not a loop** — it reads once and exits, so the scheduler owns the cadence and the OS
+owns the off switch. A lock file (no second agent on the same repository), consumption only once
+the lock is held, and a run timeout each guard against a failure that actually happens.
+
+On Windows, [`scripts/install-bridge.ps1`](scripts/install-bridge.ps1) is the ready-made task
+installer; `-WorkDir` picks the directory it answers from.
 
 ```powershell
-cd ~/Desktop/my-project; ./install-bridge.ps1          # 이 폴더 기준으로 답하게
-Disable-ScheduledTask -TaskName 'claude-telegram'      # 끄기, 한 줄
+cd ~/projects/my-app; ./install-bridge.ps1              # answer from this folder
+Disable-ScheduledTask -TaskName 'claude-telegram'      # off, one line
 ```
 
-### 반드시 알아야 하는 함정 — 브리지와 Stop 훅은 같은 수신함을 다툰다
+### The trap — the bridge and the Stop hook compete for one inbox
 
-`getUpdates` 의 offset 은 **읽는 쪽이 아니라 봇 하나에 하나**뿐이다. 브리지와 Stop 훅은 둘 다
-수신함을 읽은 뒤 `last + 1` 로 다시 읽어 소비한다. 그래서 **먼저 폴링한 쪽이 메시지를 가져가고
-나머지는 그 메시지를 영영 못 본다.**
+The `getUpdates` offset is **one per bot, not one per reader**. The bridge and the Stop hook both
+read the inbox and then consume with `last + 1`, so **whichever polls first takes the message and
+the other never sees it** — and the two do not poll at comparable rates:
 
-주기가 대등하지 않다는 게 문제다.
-
-| | 언제 폴링하나 | 이기는 빈도 |
+| | Polls | Wins |
 |---|---|---|
-| 스케줄된 브리지 | 몇 분마다, 조건 없이 | 거의 항상 |
-| `Stop` 훅 | 턴이 끝날 때만 | 그 턴 안에 브리지 tick 이 없었을 때만 |
+| scheduled bridge | every few minutes, unconditionally | almost always |
+| Stop hook | only when a turn ends | only if no bridge tick fell inside that turn |
 
-둘 다 켜 두면, 작업 중에 보낸 메시지는 **스케줄러가 가리키던 디렉터리에서 headless 로 실행되어**
-답이 돌아온다. 정작 사용자가 보고 있는 세션은 아무 일 없이 끝난다. 밖에서 보면 채널이 고장 난 것과
-구별이 안 되기 때문에, 충돌이 아니라 버그로 신고된다.
+With both on, a message sent while you are working is **run headless in whatever directory the
+scheduler points at**, and the session you are actually looking at ends with nothing. From
+outside that is indistinguishable from a broken channel, so it gets reported as a bug.
 
-**둘은 배타적이고, 어느 쪽이 맞는지는 사용자가 어디 있느냐로 갈린다.**
+**They are mutually exclusive, and which is right depends on where you are:**
 
-| 상황 | 켜 둘 것 |
+| Situation | Keep on |
 |---|---|
-| 자리에 있고 세션이 열려 있다 | **Stop 훅만.** 메시지가 그 세션에 `decision: block` 으로 꽂혀 턴이 이어진다 |
-| 자리를 비웠고 열린 세션이 없다 | **브리지만.** 달리 답할 수 있는 게 없다 |
+| at the desk, a session open | **Stop hook only** — messages land in that session as `decision: block` and the turn continues |
+| away, no session open | **bridge only** — nothing else can answer |
 
-`install-bridge.ps1` 은 Stop 훅이 이미 걸려 있으면 설치를 **거부하고** 이 선택을 대신 출력한다.
-정말 둘 다 두려면 `-Force`, 그리고 자리에 앉아 있는 동안은 `Disable-ScheduledTask`.
+`install-bridge.ps1` **refuses** to install over a wired Stop hook and prints this choice
+instead. `-Force` if you really want both, and `Disable-ScheduledTask` while you are at the desk.
 
-> **설치 전 반드시 말할 것:** 봇에게 메시지를 보낼 수 있는 사람은 그 머신에서 에이전트를 실행시킬 수 있다.
-> 막는 건 봇 토큰뿐이다. **대신 설치해주지 말고** 명령을 건네서 끄는 스위치를 사용자가 갖게 한다.
+> **Say this before installing it:** anyone who can message the bot can make an agent run on this
+> machine, and the bot token is the only thing in the way. The agent should **not install it for
+> you** — it hands over the command so you own the off switch.
 
-## 구조
+---
+
+## Layout
 
 ```
 skills/telegram-notify/
-├── SKILL.md                  # 에이전트가 읽는 본문 (약 500줄)
+├── SKILL.md                  # what the agent reads
+├── README.md · README.ko.md  # this document, English and Korean
 ├── references/
-│   ├── setup.md              # 연동 절차 · 종료 코드 · API 오류표
-│   ├── reporting.md          # 보고 형식과 필드별 문장 규칙
-│   └── reachability.md       # 세션이 끝난 뒤에도 닿게 하기 — 후보 4개와 고르는 기준
-└── scripts/                  # Node 18+, 의존성 없음
-    ├── report.mjs            # 고정 형식 상태 보고 (기계가 절반을 채운다)
-    ├── install.mjs           # 여기서 시작 — 체크리스트 + 필요한 권한 블록
-    ├── mode.mjs              # 어디로 보고할지 — 1 터미널만 / 2 둘 다 / 3 텔레그램만
-    ├── stop-hook.mjs         # Stop 훅 — 수신함 자동 확인 + 모드 3 자동 보고
-    ├── bridge.mjs            # 메시지로 세션 시작 (OS 스케줄러가 호출, 루프 아님)
-    ├── install-bridge.ps1    # 윈도우 작업 설치기 — Stop 훅과 충돌하면 거부한다
-    ├── tg-read.mjs           # 사용자가 보낸 메시지를 온디맨드로 읽기 (루프 아님)
-    ├── session-start.mjs     # SessionStart 훅 — 기다리는 메시지 + (켜져 있으면) 감시자 켜라는 지시
-    ├── watch.mjs             # Monitor 아래에서 돌리는 감시자 — 메시지가 놀고 있는 세션을 깨운다
-    ├── reachability.mjs      # 세션 밖에서 닿을 수 있나 — 환경 탐지 (설치는 안 함)
-    ├── tg.mjs                # 임의 메시지 전송
-    ├── tg-setup.mjs          # 연동 · --check
-    └── tg.sh                 # 전송의 bash 판 (Node를 쓸 수 없을 때)
+│   ├── setup.md              # linking procedure · exit codes · API error table
+│   ├── reporting.md          # the report format and per-field wording rules
+│   └── reachability.md       # reaching the machine after the session ends — four candidates and the criteria
+├── scripts/                  # Node 18+, no dependencies
+│   ├── install.mjs           # start here — checklist + the permission block
+│   ├── tg-setup.mjs          # link a bot · --check
+│   ├── tg.mjs                # send free text
+│   ├── report.mjs            # the fixed-format status report (a machine fills half)
+│   ├── mode.mjs              # where reports go — 1 terminal / 2 both / 3 telegram
+│   ├── tg-read.mjs           # read what the user sent, on demand (not a loop)
+│   ├── stop-hook.mjs         # Stop hook — read the inbox, report in mode 3, continue the turn
+│   ├── session-start.mjs     # SessionStart hook — what is waiting + the watcher instruction
+│   ├── route.mjs             # session numbers, the list, the spool, notes, session-to-session mail
+│   ├── watch.mjs             # the watcher — run under Monitor, wakes an idle session
+│   ├── reachability.mjs      # can the machine be reached between sessions — probe only
+│   ├── bridge.mjs            # start a session from a message (called by the OS scheduler)
+│   ├── install-bridge.ps1    # Windows task installer — refuses over a wired Stop hook
+│   └── tg.sh                 # sending in bash, for when Node is not available
+└── test/                     # node --test skills/telegram-notify/test/*.test.mjs
 ```
 
-`SKILL.md`는 우선순위 계층이다.
+---
 
-| 계층 | 내용 |
+## P0 — what this skill exists to prevent
+
+| # | Rule |
 |---|---|
-| **P0** | 자동·주기 전송 금지, 토큰을 repo에 두지 않기, 마스킹, 보내기 전 판단, "그만"이면 프로세스까지 죽이기 |
-| **언제** | 세 경우뿐 — 요청받았을 때 / 작업이 멈출 때 / 값어치가 있다고 판단했을 때 |
-| **어떻게** | `report.mjs` 고정 형식, 문장 규칙 |
-| **연동** | `--check` 먼저, 없으면 `references/setup.md` |
+| 0-1 | **Never build automatic or periodic sending** — no heartbeat, poller, cron, scheduler, sending hook or repeating report task. What is banned is a loop that **sends**; a wait for receiving (`watch.mjs`) is not that |
+| 0-2 | **Never put the token in a repository** — `~/.claude/local/telegram.env`, mode `0600`, and nowhere else |
+| 0-3 | Never print a token or chat id verbatim — masked output only |
+| 0-4 | Read it as the user before sending — no progress narration |
+| 0-5 | If the user says stop, **kill the processes too** |
+
+### 0-1 and 0-5 come from the same incident
+
+Deleting heartbeat and poll scripts does not stop them: the shell had already read the files
+into memory, and several processes stayed alive and kept sending for hours. **Deleting the file
+is not stopping.** `SKILL.md` carries the commands, per OS, to find and kill the processes.
+
+> "Working on X" every N minutes is not information, it is noise. The test for a message: **would
+> the user, away from the desk, have acted differently for knowing this?**
 
 ---
 
-## P0 — 이 스킬이 막으려는 것
+## Portability
 
-| # | 규칙 |
+Credentials live in one file, `~/.claude/local/telegram.env`, independent of any project.
+
+| Situation | To do |
 |---|---|
-| 0-1 | **자동·주기 전송을 만들지 않는다** — heartbeat, poller, cron, 스케줄러, 전송하는 hook, 반복 보고 태스크. 막는 것은 **보내는** 루프이고, 받기 위한 대기(`watch.mjs`)는 아니다 |
-| 0-2 | **토큰을 저장소 안에 두지 않는다** — `~/.claude/local/telegram.env` 한 곳 (`0600`) |
-| 0-3 | 토큰·chat id를 대화에 원문으로 출력하지 않는다 (마스킹된 출력만) |
-| 0-4 | 보내기 전에 사용자 입장에서 읽는다 — 진행 중계 금지 |
-| 0-5 | "그만 보내"면 **프로세스까지 죽인다** |
+| a new project | nothing |
+| a new machine | create that file (rerun setup, or copy it) |
+| a different bot per project | `TG_TOKEN` / `TG_CHAT` in the environment override the file |
+| CI · containers | inject the same variables; no file needed |
+| the file elsewhere | `TG_ENV_FILE` |
+| English report labels | `TG_LANG=en` |
+| the scratch directory elsewhere | `CLAUDE_TG_DIR` (registry, spool, lock) · `CLAUDE_PROJECTS_DIR` (transcripts, for liveness) |
 
-### 0-1과 0-5는 같은 사고에서 나왔다
+**Another messenger.** Replace `send()` in `scripts/tg.mjs` — Slack, a Discord webhook, anything
+that returns `{ ok, status, body }` — and `report.mjs` works unchanged. The format, the
+occasions and P0 do not depend on the channel. Reading and routing are Telegram-shaped in one
+place: `inbox()` in `tg-read.mjs` and its `getUpdates` offset.
 
-주기 보고를 한번 붙였다가 끄는 과정에서 실제로 벌어진 일:
-**heartbeat·poll 스크립트를 삭제한 뒤에도 메시지가 몇 시간 더 갔다.**
-셸이 파일 내용을 이미 메모리에 읽어둔 채 프로세스가 여러 개 살아 있었기 때문이다.
+**Another harness.** The scripts are plain Node and know nothing about who calls them. What the
+harness has to provide, and where this skill uses it:
 
-**파일 삭제 ≠ 중지.** `SKILL.md`에 프로세스를 찾아 죽이는 명령이 OS별로 들어 있다.
+| Need | Used for | In Claude Code |
+|---|---|---|
+| run a command when a turn ends, and let it continue the turn | reading the inbox, answering before stopping | the `Stop` hook and `decision: block` |
+| put text into a session's context when it starts | showing what is waiting, arming the watcher | the `SessionStart` hook |
+| run a background process whose stdout lines wake the agent | the watcher | the `Monitor` tool |
+| a per-project activity signal | which sessions are open | transcript mtimes under `~/.claude/projects` |
 
-> N분마다 오는 "지금 X 하는 중"은 정보가 아니라 소음이다.
-> 판단 기준 한 줄: **사용자가 자리를 비운 사이에 알았더라면 행동이 달라졌을 내용인가.**
+Without the third, everything still works; messages arrive at the next turn end instead of at
+once. Without the fourth, raise `CLAUDE_TG_LIVE_MIN` or treat every registered session as open.
 
----
-
-## 이식
-
-자격증명은 `~/.claude/local/telegram.env` 하나뿐이고 프로젝트와 무관하다.
-
-| 상황 | 할 일 |
-|---|---|
-| 새 프로젝트 | 없음 |
-| 새 머신 | 그 파일만 만들면 된다 (설정 재실행 또는 복사) |
-| 프로젝트마다 다른 봇 | 환경변수 `TG_TOKEN` / `TG_CHAT` 이 파일보다 우선 |
-| CI · 컨테이너 | 같은 환경변수 주입. 파일 없이 동작 |
-| 파일 위치 변경 | `TG_ENV_FILE` |
-| 보고 라벨을 영어로 | `TG_LANG=en` (`now`/`done`/`next`/`blocked`, `12m ago`) |
-
----
-
-## 다른 메신저로 바꾸려면
-
-`scripts/tg.mjs`의 `send()` 하나만 갈아끼우면 된다 —
-Slack이든 Discord webhook이든 `{ ok, status, body }`만 돌려주면 `report.mjs`는 그대로 동작한다.
-형식·판단 기준·P0는 채널과 무관하다.
-
-## 라이선스
+## License
 
 [MIT](../../LICENSE)
