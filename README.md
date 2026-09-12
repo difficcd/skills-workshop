@@ -15,7 +15,20 @@ Personal skills for Claude Code.
 
 ## 설치
 
-각 스킬 폴더를 통째로 skills 디렉터리에 복사하면 끝. 빌드도, 패키지도 없다.
+**가장 쉬운 방법 — Claude 에게 이 저장소 주소와 원하는 스킬 이름을 준다.** 빌드도, 패키지도 없으니
+에이전트가 클론해서 폴더를 복사하는 것이 설치의 전부다:
+
+```
+https://github.com/difficcd/skills-workshop 에서 telegram-notify 와 engineering-guardrails 를
+~/.claude/skills/ 에 설치해 줘. 설치 후 각 SKILL.md 의 "Setting it up" 절대로 확인까지.
+```
+
+에이전트는 저장소를 임시 폴더에 클론하고, 말한 스킬 폴더만 `~/.claude/skills/` 로 복사한 뒤,
+스킬에 설정 절차가 있으면(예: `telegram-notify` 의 `install.mjs` 체크리스트) 그것을 따른다.
+스킬 이름을 말하지 않으면 전부 설치된다. 사람이 해야 하는 단계(봇 토큰 발급, 훅 등록 승인)는 그
+스킬의 README 가 알려 준다.
+
+**손으로 하려면** 각 스킬 폴더를 통째로 skills 디렉터리에 복사하면 끝.
 
 ```bash
 # 모든 프로젝트에서 사용

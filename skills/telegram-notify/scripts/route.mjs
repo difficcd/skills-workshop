@@ -18,8 +18,10 @@
 // Numbers are handed out in the order projects are first seen and never reused, so a number the
 // user learned stays pointing at the same project.
 //
-//   node route.mjs           print the map, as the user is shown it
+//   node route.mjs                    print the map, as the user is shown it
 //   node route.mjs --json
+//   node route.mjs --note <text>      say what this session is doing, next to its number ('' clears)
+//   node route.mjs --tell <to> <text> leave a message for session(s) <to> - `2`, `1,3` or `*`
 //
 // Node 18+, no dependencies.
 
@@ -89,14 +91,17 @@ export function register(dir = process.cwd()) {
  */
 function migrate(reg) {
     reg.names = reg.names || {};
-    const byKey = {}, names = {};
+    reg.notes = reg.notes || {};
+    const byKey = {}, names = {}, notes = {};
     for (const [raw, n] of Object.entries(reg.byKey || {})) {
         const key = raw.replace(/-+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
         if (byKey[key] == null || n < byKey[key]) byKey[key] = n;
         if (reg.names[raw]) names[key] = reg.names[raw];
+        if (reg.notes[raw]) notes[key] = reg.notes[raw];
     }
     reg.byKey = byKey;
     reg.names = names;
+    reg.notes = notes;
     reg.next = Math.max(1, ...Object.values(byKey).map(n => n + 1));
     return reg;
 }
@@ -163,9 +168,65 @@ export function activity() {
 const listOf = (reg, act) => Object.entries(reg.byKey || {})
     .map(([key, n]) => {
         const ageMin = act && act.has(key) ? act.get(key) : null;
-        return { n, name: (reg.names || {})[key] || key, ageMin, live: ageMin != null && ageMin <= LIVE_WINDOW_MIN };
+        const note = (reg.notes || {})[key];
+        return {
+            n, name: (reg.names || {})[key] || key, ageMin,
+            live: ageMin != null && ageMin <= LIVE_WINDOW_MIN,
+            note: note ? note.text : '',
+        };
     })
     .sort((a, b) => a.n - b.n);
+
+// ------------------------------------------------------------------------------------------
+// Sessions talking to each other.
+//
+// Two sessions can be working on the same machine at once - same repo, same file, same port -
+// and neither can see the other. The map is where they meet: each can leave a one-line note
+// saying what it is doing, which the user sees on `?` and another session sees before it
+// touches the same thing. And a session can leave a message for another one through the spool,
+// delivered by that session's hook or watcher exactly like a message from the user, marked with
+// where it came from. No new file, no new process: the mailbox that already exists.
+
+/**
+ * What this session is doing, one line, shown next to its number in the map. Empty clears it.
+ *
+ * @param {string} text
+ * @param {string} [dir]
+ */
+export function setNote(text, dir = process.cwd()) {
+    const key = projectKey(dir);
+    const reg = migrate(readJson(SESSIONS, null) || { next: 1, byKey: {}, names: {}, notes: {} });
+    if (reg.byKey[key] == null) return register(dir) && setNote(text, dir);
+    if (text && text.trim()) reg.notes[key] = { text: text.trim().slice(0, 120), at: new Date().toISOString() };
+    else delete reg.notes[key];
+    writeJson(SESSIONS, reg);
+    return reg.notes[key] ? reg.notes[key].text : '';
+}
+
+/**
+ * Leave a message for another session (or several, or every open one) in the spool.
+ *
+ * `target` is written the way the user writes it - `2`, `1,3`, `*` - and the text arrives as
+ * `(session N) ...` so the reader knows it came from a session, not from the user. A broadcast
+ * does not come back to the sender.
+ *
+ * @param {string} target
+ * @param {string} text
+ * @param {number} from this session's number
+ * @returns {number[]} who it was left for
+ */
+export function tell(target, text, from) {
+    let { to } = parseRoute(`${target} x`);
+    if (to === 'all') to = (openNow(from) || []).filter(n => n !== from);
+    if (!Array.isArray(to) || !to.length) return [];
+    const at = new Date().toISOString();
+    spoolAdd([{
+        updateId: `s${from}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        chatId: 'local', from: `session ${from}`, at, kind: 'text',
+        text: `${to.join(',')} (session ${from}) ${text}`, to,
+    }], Date.now(), from);
+    return to;
+}
 
 /** Every project that has ever registered, lowest number first, each marked open or not. */
 export const list = () => listOf(migrate(readJson(SESSIONS, { byKey: {} })), activity());
@@ -182,7 +243,7 @@ export const list = () => listOf(migrate(readJson(SESSIONS, { byKey: {} })), act
 export const formatMap = (rows = list()) => {
     if (!rows.length) return 'No sessions have registered yet.';
     const age = (r) => r.ageMin == null ? '  (never run)' : r.live ? (r.ageMin <= 1 ? '' : `  (${r.ageMin}m ago)`) : '  (closed)';
-    const body = rows.map(r => `${r.n} ${r.name}${age(r)}`).join('\n');
+    const body = rows.map(r => `${r.n} ${r.name}${age(r)}${r.note ? `  - ${r.note}` : ''}`).join('\n');
     return `Put the number first to pick a session:\n${body}\n\n1,3 = both. * = every open session. No number = whichever session stops first.`;
 };
 
@@ -293,7 +354,8 @@ export function spoolAdd(messages, now = Date.now(), self = null) {
         const have = new Set(spool.map(m => m.updateId));
         for (const m of messages) {
             if (have.has(m.updateId)) continue;
-            const { to } = parseRoute(m.text);
+            // `tell` addresses its own messages; everything from Telegram is addressed off its text.
+            const to = Array.isArray(m.to) ? m.to : parseRoute(m.text).to;
             spool.push({ ...m, to: to === 'all' ? openNow(self) : to });
         }
         writeJson(SPOOL, spool);
@@ -342,7 +404,20 @@ export function spoolDrop(pred) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-    const rows = list();
-    if (process.argv.includes('--json')) console.log(JSON.stringify(rows, null, 2));
-    else console.log(formatMap(rows));
+    const argv = process.argv.slice(2);
+    const at = (flag) => { const i = argv.indexOf(flag); return i < 0 ? null : argv.slice(i + 1); };
+    const note = at('--note');
+    const tellArgs = at('--tell');
+    if (note) {
+        const text = setNote(note.join(' '));
+        console.log(text ? `note set: ${text}` : 'note cleared');
+    } else if (tellArgs && tellArgs.length >= 2) {
+        const me = register();
+        const to = tell(tellArgs[0], tellArgs.slice(1).join(' '), me.n);
+        console.log(to.length ? `left for session ${to.join(', ')}` : `nobody to tell (${tellArgs[0]})`);
+    } else {
+        const rows = list();
+        if (argv.includes('--json')) console.log(JSON.stringify(rows, null, 2));
+        else console.log(formatMap(rows));
+    }
 }

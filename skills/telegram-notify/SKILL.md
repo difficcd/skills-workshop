@@ -254,7 +254,7 @@ first - which is fine with one session open, and a coin toss with two. Send `?` 
 the numbers.
 
 ```bash
-node --test skills/telegram-notify/test/route.test.mjs    # 19 tests
+node --test skills/telegram-notify/test/route.test.mjs    # 22 tests
 ```
 
 ### A watcher — a message wakes an idle session
@@ -303,16 +303,74 @@ Answer with `tg.mjs`. The watcher sends nothing on its own account; the one thin
 waking a session for.
 
 **Two sessions, two watchers.** Telegram allows one open `getUpdates` per bot. A second watcher
-cuts the first off — measured: `Conflict: terminated by other getUpdates request` — and each side
-logs it, waits five seconds and asks again, so the two take turns. Nothing is lost: whichever
-request wins spools for both, and the other finds its share on its next pass. The cost is a few
-seconds of latency for the one that lost, and a line in stderr each time. Arm a watcher where the
-user says they will be writing; a session without one still gets its mail at its next stop.
+cuts the first off — measured: `Conflict: terminated by other getUpdates request`. The loser
+leaves the poll to the winner for 15 s and reads the spool every 2 s instead — the winner spools
+for everyone — then asks for the poll again, so a winner that has gone is replaced. Nothing is
+lost, and the loser is at most 2 s behind. Measured with two watchers for 60 s: each yielded
+twice, four extra requests a minute in total. A session without a watcher still gets its mail at
+its next stop.
 
 ```bash
 node ~/.claude/skills/telegram-notify/scripts/watch.mjs --once   # exit after the first message: checks the wiring
 node --test skills/telegram-notify/test/watch.test.mjs             # 6 tests
 ```
+
+### What it costs — measured
+
+One machine, one bot, Node 22, Windows 11; the network figures are the round trip to
+`api.telegram.org` from that machine and will differ elsewhere.
+
+| Piece | When it runs | Cost |
+|---|---|---|
+| Watcher (`watch.mjs`) | one process per session, for the session's life | 50 MB RSS, 47 ms CPU per minute (0.08 % of one core), 13 threads, 1 TCP connection kept alive; one request per 50 s while idle ≈ 0.8 KB/min ≈ 1 MB/day; zero events on a quiet day |
+| Stop hook (`stop-hook.mjs`) | once per turn end | one `node` start (170–190 ms) + one `getUpdates` (350 ms–3.8 s measured, pure network); 1.2–3.1 s wall in total, at the moment the turn is already over |
+| SessionStart hook (`session-start.mjs`) | once per session | same shape as the Stop hook: 1.2–2.5 s |
+| Map / setting commands (`route.mjs`, `watch.mjs --status`) | when asked | 180–230 ms, no network |
+| Spool, registry, lock | on every hook or watcher pass | three small JSON files in `~/.claude/local`; the spool is read and written under a lock that is held for milliseconds |
+| *N* sessions | | *N* watchers, so *N* × 50 MB and *N* × 0.08 % CPU; the poll is held by one at a time, the others yield (above) — with two, four extra requests a minute |
+
+Nothing runs between sessions. A hook or watcher that cannot reach Telegram prints nothing and
+retries later; none of them can block a turn for longer than the hook timeout.
+
+### When the session ends
+
+Everything the skill starts belongs to a session, and goes with it:
+
+- **The watcher.** The harness kills its monitor tasks when the session ends — observed on every
+  session end so far: no `watch.mjs` process outlives the session that started it. For the end
+  that is not observed (the harness dying without cleaning up), the watcher checks on every pass
+  that the process which started it is still alive, and stops if it is not. So it can never keep
+  contending for the poll with nobody to wake.
+- **The hooks** run to completion or time out; they hold nothing open.
+- **The spool.** Mail for a session that never comes back is dropped after 24 h; a lock left by a
+  process that died is taken over after 60 s.
+- **The registry** keeps the session's number (so the user's list stays valid) and marks the row
+  closed off its transcript's age; there is nothing to clean up.
+
+`tasklist` / `ps` for `watch.mjs` is the whole audit. If a session ended and one is still there,
+that is a bug — kill it and say so.
+
+### Sessions that could collide
+
+Two sessions on one machine cannot see each other, and can be in the same repo, on the same file,
+on the same port. Before touching something another open session may also be touching, use the
+map as the meeting point:
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/route.mjs --note "rebasing feature/x onto main"   # what this session is doing
+node ~/.claude/skills/telegram-notify/scripts/route.mjs                                          # what the others say they are doing
+node ~/.claude/skills/telegram-notify/scripts/route.mjs --tell 2 "hands off package.json, 10 min" # a message for session 2 (`1,3`, `*` too)
+```
+
+A note is one line next to the session's number, visible to the user on `?` and to every other
+session on the map; `--note ""` clears it. A message left with `--tell` goes through the spool
+and reaches the other session the way the user's messages do — at its next stop, or at once if
+it has a watcher — marked `(session N)` so it is read as coming from a session. A broadcast does
+not come back to its sender. Nothing new to run: the mailbox that already exists.
+
+The rule: **say what you are doing when it can collide, read the map before you collide, and tell
+the other session when you have to.** The user sees the notes too, which is how they choose a
+number.
 
 **Its relation to P0-1.** That rule bans loops that *send* — heartbeats, periodic reports, anything
 producing messages nobody asked for. The watcher is the other direction: a **wait for receiving**.

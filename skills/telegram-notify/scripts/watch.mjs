@@ -28,8 +28,12 @@
 // next stop does not find it.
 //
 // Telegram allows one open `getUpdates` per bot. Two watchers - two sessions, one bot - cut each
-// other off with 409 Conflict; each logs it, waits, and asks again. Nothing is lost, because
-// whichever request wins spools for both, but delivery to the loser waits for its next pass.
+// other off with 409 Conflict. The loser leaves the poll to the winner for a while and reads the
+// spool every two seconds instead, because the winner spools for both; then it asks again, so a
+// winner that has gone is replaced. Nothing is lost, and the loser is at most two seconds behind.
+//
+// It stops by itself when the process that started it is gone, so a session that ends without
+// the harness cleaning up does not leave a watcher contending for the poll with nobody to wake.
 //
 // Arming it is the session's job, not the user's. With `--on`, the SessionStart hook
 // (`session-start.mjs`) tells every new session to arm it before doing anything else, so the
@@ -70,10 +74,24 @@ export const armInstruction = () => !wanted() ? '' : [
 
 const WAIT_SEC = 50;          // Telegram's maximum for one long poll
 const RETRY_MS = 5_000;       // after a failed request, so a flapping network does not spin
+const YIELD_MS = 15_000;      // after losing the poll to another watcher: how long to leave it theirs
+const PEEK_MS = 2_000;        // ...checking the spool this often meanwhile, since they spool for us too
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const say = (line) => { process.stdout.write(line + '\n'); };
 const log = (line) => { process.stderr.write(line + '\n'); };
+
+/** Telegram's answer when another watcher took the one long poll a bot may have open. */
+const lostThePoll = (err) => /terminated by other getUpdates/i.test(String(err));
+
+/**
+ * True while the process that started this one is alive.
+ *
+ * The harness kills a monitor when its session ends, and every observed session end has done
+ * so. This is for the end that is not observed - the harness dying without cleaning up - so a
+ * watcher cannot outlive its session and keep contending for the poll with nobody to wake.
+ */
+const parentAlive = () => { try { process.kill(process.ppid, 0); return true; } catch { return false; } };
 
 /**
  * Hand this session's share to the session. Returns how many lines woke it.
@@ -105,12 +123,28 @@ async function main() {
     log(`watching as session ${me.n}`);
 
     for (;;) {
+        if (!parentAlive()) { log('session is gone; stopping'); return; }
+
         // This session's share first - whoever fetched it.
         if (await deliver(spoolTake(me.n), creds) && once) return;
 
         let r;
         try { r = await inbox(creds, undefined, WAIT_SEC); }
         catch (e) { log(`inbox: ${e && e.message ? e.message : e}`); await sleep(RETRY_MS); continue; }
+        if (!r.ok && lostThePoll(r.error)) {
+            // Another session's watcher holds the poll and spools for everyone, this session
+            // included. Contending again at once would only take it back and hand it over
+            // again, one request per turn; instead leave it theirs for a while and read the
+            // spool, which is where anything for this session will appear. The poll is asked for
+            // again afterwards, so if the other watcher has gone, this one takes over.
+            log('another watcher holds the poll; reading the spool meanwhile');
+            for (let waited = 0; waited < YIELD_MS; waited += PEEK_MS) {
+                await sleep(PEEK_MS);
+                if (!parentAlive()) { log('session is gone; stopping'); return; }
+                if (await deliver(spoolTake(me.n), creds) && once) return;
+            }
+            continue;
+        }
         if (!r.ok) { log(`inbox: ${r.error}`); await sleep(RETRY_MS); continue; }
         if (!r.messages.length) continue;   // the long poll timed out quietly; ask again
 

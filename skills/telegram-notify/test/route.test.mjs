@@ -259,3 +259,38 @@ test('a request for the map is recognised, and ordinary text is not', () => {
     for (const t of ['?', ' ? ', 'map', 'MAP', '세션', '목록']) assert.ok(route.isMapRequest(t), t);
     for (const t of ['?why', 'map the project', 'what?', '']) assert.ok(!route.isMapRequest(t), t);
 });
+
+// ---- sessions talking to each other -------------------------------------------------------
+
+test('a note shows next to the session in the map, and an empty one clears it', () => {
+    reset();
+    route.register('C:/work/alpha');
+    route.setNote('  rebasing feature/x onto main  ', 'C:/work/alpha');
+    assert.match(route.formatMap(), /^1 alpha.*  - rebasing feature\/x onto main$/m);
+    route.setNote('', 'C:/work/alpha');
+    assert.doesNotMatch(route.formatMap(), /rebasing/);
+});
+
+test('a session can leave a message for another, marked with where it came from', () => {
+    reset();
+    assert.deepEqual(route.tell('2', 'I am editing package.json, wait for me', 1), [2]);
+    assert.deepEqual(route.spoolTake(1), [], 'not to the sender');
+    const got = route.spoolTake(2);
+    assert.equal(got.length, 1);
+    assert.equal(got[0].text, '(session 1) I am editing package.json, wait for me');
+    assert.equal(got[0].from, 'session 1');
+});
+
+test('a broadcast from a session reaches every open session but itself', () => {
+    reset();
+    route.register('C:/work/alpha');   // 1
+    route.register('C:/work/beta');    // 2
+    route.register('C:/work/gamma');   // 3
+    transcript('C--work-alpha', 0);
+    transcript('C--work-beta', 0);
+    transcript('C--work-gamma', 90);   // closed
+    assert.deepEqual(route.tell('*', 'releasing in 5 minutes', 1), [2]);
+    assert.deepEqual(route.spoolTake(1), []);
+    assert.deepEqual(route.spoolTake(3), []);
+    assert.deepEqual(route.spoolTake(2).map(m => m.text), ['(session 1) releasing in 5 minutes']);
+});
