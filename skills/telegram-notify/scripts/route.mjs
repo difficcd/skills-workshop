@@ -125,7 +125,7 @@ const LIVE_WINDOW_MIN = Number(process.env.CLAUDE_TG_LIVE_MIN || 30);
  * `C--Users-me-proj` - two dashes where `projectKey` collapses a run of separators into one. Both
  * sides are folded here rather than one being decoded from the other, because the directory name
  * genuinely cannot be decoded: `-` also stands for itself inside project names, so
- * `...-Desktop-SmartRouter-main` is unsplittable. This is the same fold `migrate` applies, which
+ * `...-Desktop-my-app-main` is unsplittable. This is the same fold `migrate` applies, which
  * is why an old key and a new one meet in the middle instead of becoming two entries.
  */
 const dirKey = (dir) => dir.replace(/-+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();

@@ -188,13 +188,13 @@ test('a session takes its own mail and leaves everyone else theirs', () => {
     // This is the whole point: before the spool, whichever session stopped first acknowledged the
     // inbox for the entire bot, and the other project's message was gone without being seen.
     reset();
-    route.spoolAdd([msg(1, '1 for smartrouter'), msg(2, '2 for easy'), msg(3, 'for anyone')]);
+    route.spoolAdd([msg(1, '1 for my-app'), msg(2, '2 for other-app'), msg(3, 'for anyone')]);
 
     const two = route.spoolTake(2);
-    assert.deepEqual(two.map(m => m.text), ['for easy', 'for anyone']);
+    assert.deepEqual(two.map(m => m.text), ['for other-app', 'for anyone']);
 
     const one = route.spoolTake(1);
-    assert.deepEqual(one.map(m => m.text), ['for smartrouter'], 'still there after session 2 ran');
+    assert.deepEqual(one.map(m => m.text), ['for my-app'], 'still there after session 2 ran');
 });
 
 test('a message is delivered once, not to every session', () => {

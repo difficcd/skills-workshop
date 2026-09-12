@@ -16,7 +16,7 @@ noise. Half of this skill is how to send; the other half is how not to.
 
 | # | Rule | Why |
 |---|---|---|
-| 0-1 | **Never build automatic or periodic sending.** No heartbeat or poll script, cron, scheduler, sending hook, or repeating watch task. What is banned is a **loop running in the background**, not a command the agent invokes once (`tg-read.mjs` is fine) | "Working on X" every N minutes is not information, it is noise. Once built, the user has to turn it off themselves |
+| 0-1 | **Never build automatic or periodic sending.** No heartbeat or poll script, cron, scheduler, sending hook, or repeating report task. What is banned is a **loop running in the background that sends**, not a command the agent invokes once (`tg-read.mjs` is fine) and not a wait for receiving (`watch.mjs`, see "A watcher") | "Working on X" every N minutes is not information, it is noise. Once built, the user has to turn it off themselves |
 | 0-2 | **Never put the token in a repository.** Credentials live in `~/.claude/local/telegram.env` and nowhere else | Committed is stolen. That file belongs to no repo |
 | 0-3 | **Never print a token or chat id verbatim.** Use the masked output when confirming | It survives in transcripts, logs and screenshots |
 | 0-4 | **Read it as the user before sending.** No progress narration, no self-reporting | See "When to send" |
@@ -122,7 +122,8 @@ Both print `200` on success. With no credentials they print the setup command an
 ## Reading what the user sent
 
 This channel is **not send-only** — but nothing is listening in the background either. Listening
-needs a loop, and a loop is what P0-1 bans. So reading happens **once, when the agent asks**.
+needs a loop, and a loop is what P0-1 bans. So reading happens **once, when the agent asks** —
+or, for one open session, through a watcher that wakes it (see "A watcher" below).
 
 ```bash
 node ~/.claude/skills/telegram-notify/scripts/tg-read.mjs             # what is waiting
@@ -192,9 +193,9 @@ node ~/.claude/skills/telegram-notify/scripts/route.mjs     # the list, as the u
 
 ```
 Put the number first to pick a session:
-1 smartrouter-main
-2 easy-mv-maker  (closed)
-3 old-thing      (never run)
+1 my-app
+2 other-app    (closed)
+3 old-app      (never run)
 ```
 
 Numbers are handed out the first time a project's hook runs and never reused, so a number the
@@ -240,6 +241,47 @@ the numbers.
 ```bash
 node --test skills/telegram-notify/test/route.test.mjs    # 16 tests
 ```
+
+### A watcher — a message wakes an idle session
+
+The Stop hook reads the inbox **when a turn ends**. Between turns — the agent idle, waiting for
+the user to type — nothing runs, so a message sent then sits until someone presses enter in the
+terminal. From the phone that is a bot that does not answer.
+
+`watch.mjs` closes that gap **for one session, while it lives**. It prints one line per message
+addressed to this session; run it under the harness's **Monitor** tool, where every stdout line is
+an event that wakes the session, and the session answers as if the line had been typed:
+
+```
+Monitor({ command: 'node ~/.claude/skills/telegram-notify/scripts/watch.mjs',
+          description: 'Telegram messages for this session', persistent: true })
+```
+
+Arm it when the user says they will write from Telegram while the session stays open. One per
+session; `persistent: true`, because the point is to be there whenever the message comes.
+
+How it works: one `getUpdates` request held open for up to 50 s — Telegram's long poll, which is
+what the `waitSec` argument of `inbox()` in `tg-read.mjs` turns on (every other caller leaves it
+at 0 and returns at once). When something arrives it goes into the **same spool the Stop hook
+uses**, is acknowledged, and only this session's share comes out — its own number, or no number.
+Another session's mail stays in the spool for that session's own hook and does not wake this one.
+What is printed has already left the spool, so the next stop does not deliver it again. A `?`
+prints the session map for the agent to send back. Nothing is delivered twice, and nothing is
+delivered to the wrong session, because the routing code is the one the hook already runs.
+
+Answer with `tg.mjs`. The watcher never sends.
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/watch.mjs --once   # exit after the first message: checks the wiring
+node --test skills/telegram-notify/test/watch.test.mjs             # 4 tests
+```
+
+**Its relation to P0-1.** That rule bans loops that *send* — heartbeats, periodic reports, anything
+producing messages nobody asked for. The watcher is the other direction: a **wait for receiving**.
+It sends nothing; its idle cost is one open connection, and a quiet day produces zero events. And it
+is tied to the session — listed under the harness's tasks, stopped with one `TaskStop`, gone when
+the session ends. It cannot outlive its owner and it cannot multiply, which are the two failures the
+detached shell loop actually had.
 
 ### "Message the bot and have a session start"
 

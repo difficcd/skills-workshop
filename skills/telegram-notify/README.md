@@ -92,7 +92,8 @@ chat id를 자동으로 찾고, 저장하고, **시험 발송까지 해서 끝�
 ## 읽기 — 봇은 뒤에서 듣고 있지 않다
 
 **처음 쓰는 사람이 반드시 알아야 할 것.** 사용자가 봇에게 보낸 메시지는 에이전트가 읽으러 갈 때까지
-조용히 기다린다. 뒤에서 듣고 있으려면 루프가 필요하고, 그게 P0-1이 금지하는 바로 그것이다.
+조용히 기다린다. 뒤에서 듣고 있으려면 루프가 필요하고, 보내는 루프는 P0-1이 금지한다. 세션 하나를
+열어 둔 채 메시지로 깨우고 싶다면 아래 "감시자" 절.
 
 ```bash
 node ~/.claude/skills/telegram-notify/scripts/tg-read.mjs             # 기다리는 것 보기
@@ -133,9 +134,9 @@ node ~/.claude/skills/telegram-notify/scripts/route.mjs
 
 ```
 Put the number first to pick a session:
-1 smartrouter-main
-2 easy-mv-maker  (closed)
-3 old-thing      (never run)
+1 my-app
+2 other-app    (closed)
+3 old-app      (never run)
 ```
 
 번호는 그 프로젝트의 훅이 처음 돌 때 배정되고 재사용되지 않는다 — 한 번 외운 번호는 계속 같은
@@ -170,6 +171,45 @@ Put the number first to pick a session:
 ```bash
 node --test skills/telegram-notify/test/route.test.mjs    # 테스트 16개
 ```
+
+## 감시자 — 메시지가 놀고 있는 세션을 깨운다
+
+Stop 훅은 **턴이 끝날 때** 수신함을 읽는다. 턴과 턴 사이 — 에이전트가 사용자의 입력을 기다리며
+놀고 있는 동안 — 에는 아무것도 돌지 않으므로, 그때 보낸 메시지는 누군가 터미널에서 엔터를 칠 때까지
+그대로 앉아 있다. 폰에서 보면 대답 없는 봇이다.
+
+`watch.mjs` 가 그 틈을 **세션 하나에 대해, 세션이 사는 동안** 메운다. 이 세션 앞으로 온 메시지를
+한 줄에 하나씩 출력하는 스크립트인데, 하네스의 **Monitor** 도구 아래에서 돌리면 stdout 한 줄이
+곧 세션을 깨우는 이벤트가 되고, 세션은 그 줄이 터미널에 입력된 것처럼 답한다:
+
+```
+Monitor({ command: 'node ~/.claude/skills/telegram-notify/scripts/watch.mjs',
+          description: 'Telegram messages for this session', persistent: true })
+```
+
+사용자가 "세션은 열어 둘 테니 텔레그램으로 보내겠다"고 할 때 켠다. 세션당 하나면 되고,
+`persistent: true` 로 켠다 — 메시지가 언제 오든 거기 있는 것이 목적이니까.
+
+동작 원리: `getUpdates` 요청 하나를 최대 50초 열어 둔다 — 텔레그램의 롱 폴이고, `tg-read.mjs` 의
+`inbox()` 에 붙은 `waitSec` 인자가 그것을 켠다 (다른 호출자는 전부 0, 즉시 반환). 무언가 도착하면
+**Stop 훅과 같은 스풀**에 넣고 확인 처리한 뒤, 이 세션 몫만 꺼낸다 — 자기 번호가 붙었거나 번호가
+없는 것. 다른 세션 앞으로 온 메시지는 그 세션의 훅을 위해 스풀에 남고 이 세션을 깨우지 않는다.
+출력된 것은 이미 스풀에서 빠졌으므로 다음 Stop 이 다시 배달하지 않는다. `?` 는 세션 목록을 출력해서
+에이전트가 답으로 보내게 한다. 두 번 배달되지도, 엉뚱한 세션에 가지도 않는다 — 훅이 이미 쓰는
+라우팅 코드를 그대로 타기 때문이다.
+
+답은 `tg.mjs` 로 보낸다. 감시자는 절대 보내지 않는다.
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/watch.mjs --once   # 첫 메시지 하나 받고 종료: 배선 확인용
+node --test skills/telegram-notify/test/watch.test.mjs             # 테스트 4개
+```
+
+**P0-1 과의 관계.** 그 규칙이 막는 것은 *보내는* 루프다 — heartbeat, 주기 보고, 아무도 묻지 않은
+메시지를 만들어내는 모든 것. 감시자는 반대 방향, **받기 위한 대기**다. 아무것도 보내지 않고, 놀 때의
+비용은 열린 연결 하나이며, 조용한 하루는 이벤트 0개다. 그리고 세션에 묶여 있다 — 하네스의 태스크
+목록에 보이고, `TaskStop` 한 번에 멈추고, 세션이 끝나면 같이 죽는다. 주인보다 오래 살 수도, 여러 개로
+불어날 수도 없다 — 예전 분리된 셸 루프가 실제로 겪은 두 가지 실패가 바로 그것이었다.
 
 ## 메시지로 세션 시작하기
 
@@ -295,6 +335,7 @@ skills/telegram-notify/
     ├── bridge.mjs            # 메시지로 세션 시작 (OS 스케줄러가 호출, 루프 아님)
     ├── install-bridge.ps1    # 윈도우 작업 설치기 — Stop 훅과 충돌하면 거부한다
     ├── tg-read.mjs           # 사용자가 보낸 메시지를 온디맨드로 읽기 (루프 아님)
+    ├── watch.mjs             # Monitor 아래에서 돌리는 감시자 — 메시지가 놀고 있는 세션을 깨운다
     ├── reachability.mjs      # 세션 밖에서 닿을 수 있나 — 환경 탐지 (설치는 안 함)
     ├── tg.mjs                # 임의 메시지 전송
     ├── tg-setup.mjs          # 연동 · --check
@@ -316,7 +357,7 @@ skills/telegram-notify/
 
 | # | 규칙 |
 |---|---|
-| 0-1 | **자동·주기 전송을 만들지 않는다** — heartbeat, poller, cron, 스케줄러, 전송하는 hook, 반복 감시 태스크 |
+| 0-1 | **자동·주기 전송을 만들지 않는다** — heartbeat, poller, cron, 스케줄러, 전송하는 hook, 반복 보고 태스크. 막는 것은 **보내는** 루프이고, 받기 위한 대기(`watch.mjs`)는 아니다 |
 | 0-2 | **토큰을 저장소 안에 두지 않는다** — `~/.claude/local/telegram.env` 한 곳 (`0600`) |
 | 0-3 | 토큰·chat id를 대화에 원문으로 출력하지 않는다 (마스킹된 출력만) |
 | 0-4 | 보내기 전에 사용자 입장에서 읽는다 — 진행 중계 금지 |

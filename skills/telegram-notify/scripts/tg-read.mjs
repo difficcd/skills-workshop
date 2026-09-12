@@ -27,11 +27,13 @@ import { credentials, scrub } from './tg.mjs';
  *
  * @param {{token: string, chat: string}} creds
  * @param {number} [offset] acknowledge everything below this id
+ * @param {number} [waitSec] hold the request open this long waiting for a message (long poll).
+ *        0 - the default - returns at once. `watch.mjs` is the only caller that waits.
  */
-export async function inbox(creds, offset) {
+export async function inbox(creds, offset, waitSec = 0) {
     const url = new URL(`https://api.telegram.org/bot${creds.token}/getUpdates`);
     if (offset != null) url.searchParams.set('offset', String(offset));
-    url.searchParams.set('timeout', '0');   // never hold the connection open - this is one shot
+    url.searchParams.set('timeout', String(Math.max(0, Math.min(50, waitSec | 0))));
     const res = await fetch(url);
     const body = await res.json().catch(() => ({ ok: false }));
     if (!body.ok) return { ok: false, error: scrub(body.description || `HTTP ${res.status}`), messages: [] };
