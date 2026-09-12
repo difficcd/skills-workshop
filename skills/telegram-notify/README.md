@@ -1,14 +1,28 @@
 # telegram-notify
 
-에이전트가 자리를 비운 사용자에게 **텔레그램으로 한 통 보내는** skill.
-연동 절차, 보내는 기준, 그리고 **"세션이 멈춘 건 아닌지" 를 확인시켜 주는 고정 보고 형식**까지 들어 있다.
+**컴퓨터만 켜 두면, 폰의 텔레그램으로 이 머신의 세션들을 관리하고 지시하는** skill.
+자리를 비운 사용자에게 에이전트가 보고하고, 사용자는 답장으로 지시하고, 세션이 여럿이면 번호로
+골라 보내고, 놀고 있는 세션은 메시지가 오는 순간 깨어나 답한다. 연동 절차, 보낼 때와 안 보낼 때의
+기준, 그리고 **"세션이 멈춘 건 아닌지" 를 확인시켜 주는 고정 보고 형식**까지 들어 있다.
 
-> A Claude Code skill for reaching the user on Telegram — setup, send, and a fixed status-report
-> format whose machine-read half answers the question free text cannot: *is this session alive?*
-> Node 18+, zero dependencies. Korean by default; `TG_LANG=en` for English report labels.
+> A Claude Code skill that turns Telegram into a two-way link with the sessions on a machine:
+> reports out, instructions in, a number to pick the session, a watcher that wakes an idle one,
+> and a fixed status-report format whose machine-read half answers the question free text
+> cannot: *is this session alive?* Node 18+, zero dependencies. Korean by default; `TG_LANG=en`
+> for English report labels.
 
-이 스킬의 절반은 **보내는 법**이고 나머지 절반은 **안 보내는 법**이다.
-알림 채널은 에이전트가 사용자에게 닿는 유일한 통로이자, 가장 쉽게 소음이 되는 통로다.
+양방향 모두 조용하게 만들어져 있다. 보내는 쪽은 손으로, 세 경우에만 — heartbeat 도 주기 보고도
+없다. 받는 쪽은 훅과 세션당 감시자 하나로, 아무도 쓰지 않는 동안엔 비용이 0이다. 에이전트가
+자리를 비운 사용자에게 닿는 유일한 통로는 가장 쉽게 소음이 되는 통로이기도 해서, 이 스킬의 절반은
+**보내고 듣는 법**이고 나머지 절반은 **안 보내는 법**이다.
+
+```
+폰                                     컴퓨터 (켜 두기만)
+ ?                 ─────────────▶       1 my-app · 2 other-app (closed)
+ 1 테스트 돌려서 결과 알려줘 ────▶       세션 1 깨어남 → 실행 → 보고
+ * 지금 뭐 해?    ─────────────▶       열린 세션 전부 답함
+ ◀──────────────  🟢 my-app · 18:27 지금: 결제 실패 재시도 테스트 작성 …
+```
 
 ---
 
@@ -89,6 +103,40 @@ chat id를 자동으로 찾고, 저장하고, **시험 발송까지 해서 끝�
 
 ---
 
+## 쓰기
+
+```bash
+# 상태 보고 (권장)
+node ~/.claude/skills/telegram-notify/scripts/report.mjs --now "테스트 작성" --done "재시도 로직 구현"
+node ~/.claude/skills/telegram-notify/scripts/report.mjs --blocked "서명 키 비밀번호 필요"
+node ~/.claude/skills/telegram-notify/scripts/report.mjs --dry          # 보내지 않고 형식만 확인
+
+# 임의 메시지
+node ~/.claude/skills/telegram-notify/scripts/tg.mjs "내용"
+echo "내용" | node ~/.claude/skills/telegram-notify/scripts/tg.mjs
+```
+
+성공하면 `200`만 출력한다.
+
+## 모드 — 어디로 보고할까
+
+사용자가 **지금 어디에 있느냐**의 문제지 작업의 문제가 아니다.
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/mode.mjs      # 현재 모드
+node ~/.claude/skills/telegram-notify/scripts/mode.mjs 2    # 설정
+```
+
+| 모드 | 터미널 | 텔레그램 | 언제 |
+|---|---|---|---|
+| **1** | 전부 | **안 보냄** | 자리에 있음. 화면에 이미 있는 걸 또 울릴 이유가 없다 |
+| **2** | 전부 | 중요한 순간에만 | 기본값. 있지만 잠깐 나갈 수 있음 |
+| **3** | **짧게** | 전부 | 나가 있음. 터미널은 줄여 토큰을 아끼고, 보고는 메시지로 |
+
+모드 1에서는 `tg.mjs` 와 `report.mjs` 가 **보낼 내용을 출력만 하고 종료**한다. 잃는 것도 없고 울리지도 않는다.
+
+---
+
 ## 읽기 — 봇은 뒤에서 듣고 있지 않다
 
 **처음 쓰는 사람이 반드시 알아야 할 것.** 사용자가 봇에게 보낸 메시지는 에이전트가 읽으러 갈 때까지
@@ -103,14 +151,35 @@ node ~/.claude/skills/telegram-notify/scripts/tg-read.mjs --consume   # 보고 �
 `getUpdates`는 우편함이지 스트림이 아니라서, 늦게 읽는다고 잃는 게 없다.
 이걸 말해주지 않으면 "연동이 안 됐다"로 읽힌다 — 실제로 그렇게 읽혔고, 그래서 이 절이 있다.
 
-**"세션 끝나도 되게 해줘"** 는 환경마다 답이 다르다. 추측하지 말고 탐지한다:
+## 자동 감지는 훅으로 — 습관이 아니라
 
-```bash
-node ~/.claude/skills/telegram-notify/scripts/reachability.mjs
+**스킬은 문서다.** 에이전트가 이미 행동할 때 무엇을 할지를 바꿀 뿐, 턴 안에서 수신함을 읽거나 보고를
+보내는 건 아무것도 없다. 그래서 "멈출 때 보내라"는 규칙이 계속 깨졌고 메시지도 안 읽혔다 — 둘 다
+에이전트의 기억력에 달려 있었기 때문이다.
+
+**훅은 하네스가 실행한다.** `Stop` 에 연결하면:
+
+```json
+{ "hooks": { "Stop": [{ "hooks": [{ "type": "command",
+  "command": "node ~/.claude/skills/telegram-notify/scripts/stop-hook.mjs", "timeout": 30 }] }] } }
 ```
 
-OS·`claude` CLI·스케줄러·자격증명을 보고 후보 넷을 **확실성과 오버헤드로 채점해서** 하나를 고른다.
-설치는 하지 않는다 — 고르는 건 사용자다. 기준과 근거는 [`references/reachability.md`](references/reachability.md).
+매번 멈출 때 수신함을 읽고, **모드 3이면** 보고를 보내고, 새 메시지가 있으면 `decision: block` 으로
+돌려줘서 **턴이 끝나지 않고 답하게** 만든다. 무한루프는 불가능하다 — block 전에 메시지를 소비하므로
+다음 stop에서는 수신함이 비어 있다.
+
+모드 2는 일부러 자동 보고를 **안 한다.** 터미널이 이미 닿았고, 매 턴 끝마다 메시지를 보내는 것이
+P0-1이 막으려는 그 소음이다.
+
+`SessionStart` 에는 `session-start.mjs` 를 건다. 새 세션의 컨텍스트에 기다리는 메시지를 찍고,
+감시자 설정이 켜져 있으면 감시자를 켜라는 지시까지 찍는다 (아래 "감시자"):
+
+```json
+{ "hooks": { "SessionStart": [{ "hooks": [{ "type": "command",
+  "command": "node ~/.claude/skills/telegram-notify/scripts/session-start.mjs", "timeout": 20 }] }] } }
+```
+
+두 훅 모두 실패하면 아무것도 출력하지 않고 0으로 끝난다 — 고장 난 알림기가 세션을 붙잡아서는 안 된다.
 
 ## 세션이 여러 개일 때 — 번호를 앞에 붙인다
 
@@ -207,12 +276,6 @@ node ~/.claude/skills/telegram-notify/scripts/watch.mjs --off     # 다시 수�
 꺼져 있으면, 사용자가 "텔레그램으로 보내겠다"고 할 때 켠다. 세션당 하나면 되고, `persistent: true`
 로 켠다 — 메시지가 언제 오든 거기 있는 것이 목적이니까. 설정과 훅이 맞는지는 `install.mjs` 가 보여 준다.
 
-훅 등록 (`~/.claude/settings.json`):
-
-```json
-{ "hooks": { "SessionStart": [{ "hooks": [{ "type": "command",
-  "command": "node ~/.claude/skills/telegram-notify/scripts/session-start.mjs", "timeout": 20 }] }] } }
-```
 
 동작 원리: `getUpdates` 요청 하나를 최대 50초 열어 둔다 — 텔레그램의 롱 폴이고, `tg-read.mjs` 의
 `inbox()` 에 붙은 `waitSec` 인자가 그것을 켠다 (다른 호출자는 전부 0, 즉시 반환). 무언가 도착하면
@@ -238,41 +301,7 @@ node ~/.claude/skills/telegram-notify/scripts/watch.mjs --once   # 첫 메시지
 node --test skills/telegram-notify/test/watch.test.mjs             # 테스트 6개
 ```
 
-### 비용 — 실측
-
-머신 하나, 봇 하나, Node 22, Windows 11. 네트워크 수치는 그 머신에서 `api.telegram.org` 까지의
-왕복이라 환경마다 다르다.
-
-| 구성요소 | 언제 도는가 | 비용 |
-|---|---|---|
-| 감시자 (`watch.mjs`) | 세션당 프로세스 하나, 세션이 사는 동안 | RSS 50 MB, CPU 분당 47 ms (코어 하나의 0.08 %), 스레드 13, 유지되는 TCP 연결 1개; 유휴 시 50초마다 요청 하나 ≈ 0.8 KB/분 ≈ 1 MB/일; 조용한 날 이벤트 0개 |
-| Stop 훅 (`stop-hook.mjs`) | 턴이 끝날 때마다 한 번 | `node` 기동 (170–190 ms) + `getUpdates` 한 번 (실측 350 ms–3.8 s, 순수 네트워크); 합쳐서 벽시계 1.2–3.1 s, 턴이 이미 끝난 시점에 |
-| SessionStart 훅 (`session-start.mjs`) | 세션당 한 번 | Stop 훅과 같은 모양: 1.2–2.5 s |
-| 목록·설정 명령 (`route.mjs`, `watch.mjs --status`) | 요청 시 | 180–230 ms, 네트워크 없음 |
-| 스풀·장부·락 | 훅이나 감시자의 매 회차 | `~/.claude/local` 의 작은 JSON 파일 셋; 스풀은 밀리초 단위로 잡는 락 아래서 읽고 쓴다 |
-| 세션 *N* 개 | | 감시자 *N* 개 → *N* × 50 MB, *N* × 0.08 % CPU; 폴은 한 번에 하나가 잡고 나머지는 양보(위) — 둘일 때 분당 4회 추가 요청 |
-
-세션 사이에는 아무것도 돌지 않는다. 텔레그램에 닿지 못한 훅과 감시자는 아무것도 출력하지 않고
-나중에 다시 시도하며, 어느 것도 훅 타임아웃보다 오래 턴을 붙잡을 수 없다.
-
-### 세션이 끝나면
-
-이 스킬이 띄우는 모든 것은 세션에 속하고, 세션과 함께 사라진다:
-
-- **감시자.** 하네스가 세션 종료 시 모니터 태스크를 죽인다 — 지금까지의 모든 세션 종료에서 관측됨:
-  자신을 띄운 세션보다 오래 사는 `watch.mjs` 프로세스는 없었다. 관측되지 않는 종료(하네스가 정리
-  없이 죽는 경우)를 위해 감시자는 매 회차 자신을 띄운 프로세스가 살아 있는지 확인하고, 없으면 스스로
-  멈춘다. 그래서 깨울 대상 없이 폴을 두고 다투는 일은 생길 수 없다.
-- **훅**은 끝까지 돌거나 타임아웃된다. 아무것도 열어 두지 않는다.
-- **스풀.** 돌아오지 않는 세션의 메시지는 24시간 뒤 버려지고, 죽은 프로세스가 남긴 락은 60초 뒤
-  인수된다.
-- **장부**는 세션 번호를 유지하고(사용자의 목록이 그대로 유효하도록) transcript 나이로 닫힘을
-  표시한다. 치울 것이 없다.
-
-`tasklist` / `ps` 로 `watch.mjs` 를 찾는 것이 감사의 전부다. 세션이 끝났는데 남아 있다면 버그다 —
-죽이고 말할 것.
-
-### 충돌할 수 있는 세션들
+## 충돌할 수 있는 세션들
 
 한 머신의 두 세션은 서로를 볼 수 없는데, 같은 저장소·같은 파일·같은 포트에 있을 수 있다. 다른
 열린 세션도 건드릴 수 있는 것을 건드리기 전에, 지도를 만남의 장소로 쓴다:
@@ -297,9 +326,55 @@ node ~/.claude/skills/telegram-notify/scripts/route.mjs --tell 2 "package.json 1
 목록에 보이고, `TaskStop` 한 번에 멈추고, 세션이 끝나면 같이 죽는다. 주인보다 오래 살 수도, 여러 개로
 불어날 수도 없다 — 예전 분리된 셸 루프가 실제로 겪은 두 가지 실패가 바로 그것이었다.
 
-## 메시지로 세션 시작하기
+## 세션이 끝나면
 
-훅은 **이미 돌고 있는 세션 안에서만** 도움이 된다. 메시지가 세션을 *시작*하게 하려면 아무것도 안 돌 때
+이 스킬이 띄우는 모든 것은 세션에 속하고, 세션과 함께 사라진다:
+
+- **감시자.** 하네스가 세션 종료 시 모니터 태스크를 죽인다 — 지금까지의 모든 세션 종료에서 관측됨:
+  자신을 띄운 세션보다 오래 사는 `watch.mjs` 프로세스는 없었다. 관측되지 않는 종료(하네스가 정리
+  없이 죽는 경우)를 위해 감시자는 매 회차 자신을 띄운 프로세스가 살아 있는지 확인하고, 없으면 스스로
+  멈춘다. 그래서 깨울 대상 없이 폴을 두고 다투는 일은 생길 수 없다.
+- **훅**은 끝까지 돌거나 타임아웃된다. 아무것도 열어 두지 않는다.
+- **스풀.** 돌아오지 않는 세션의 메시지는 24시간 뒤 버려지고, 죽은 프로세스가 남긴 락은 60초 뒤
+  인수된다.
+- **장부**는 세션 번호를 유지하고(사용자의 목록이 그대로 유효하도록) transcript 나이로 닫힘을
+  표시한다. 치울 것이 없다.
+
+`tasklist` / `ps` 로 `watch.mjs` 를 찾는 것이 감사의 전부다. 세션이 끝났는데 남아 있다면 버그다 —
+죽이고 말할 것.
+
+## 비용 — 실측
+
+실측 환경: 노트북 한 대 — Intel Core i5-1340P (12코어/16스레드), RAM 16 GB, Windows 11 Pro, Node 22.
+봇 하나. 네트워크 수치는 그 머신에서 `api.telegram.org` 까지의 왕복이라 회선마다 다르고, 메모리·CPU 는
+Node 프로세스의 것이라 어디서나 비슷할 것이다.
+
+| 구성요소 | 언제 도는가 | 비용 |
+|---|---|---|
+| 감시자 (`watch.mjs`) | 세션당 프로세스 하나, 세션이 사는 동안 | RSS 50 MB, CPU 분당 47 ms (코어 하나의 0.08 %), 스레드 13, 유지되는 TCP 연결 1개; 유휴 시 50초마다 요청 하나 ≈ 0.8 KB/분 ≈ 1 MB/일; 조용한 날 이벤트 0개 |
+| Stop 훅 (`stop-hook.mjs`) | 턴이 끝날 때마다 한 번 | `node` 기동 (170–190 ms) + `getUpdates` 한 번 (실측 350 ms–3.8 s, 순수 네트워크); 합쳐서 벽시계 1.2–3.1 s, 턴이 이미 끝난 시점에 |
+| SessionStart 훅 (`session-start.mjs`) | 세션당 한 번 | Stop 훅과 같은 모양: 1.2–2.5 s |
+| 목록·설정 명령 (`route.mjs`, `watch.mjs --status`) | 요청 시 | 180–230 ms, 네트워크 없음 |
+| 스풀·장부·락 | 훅이나 감시자의 매 회차 | `~/.claude/local` 의 작은 JSON 파일 셋; 스풀은 밀리초 단위로 잡는 락 아래서 읽고 쓴다 |
+| 세션 *N* 개 | | 감시자 *N* 개 → *N* × 50 MB, *N* × 0.08 % CPU; 폴은 한 번에 하나가 잡고 나머지는 양보(위) — 둘일 때 분당 4회 추가 요청 |
+
+세션 사이에는 아무것도 돌지 않는다. 텔레그램에 닿지 못한 훅과 감시자는 아무것도 출력하지 않고
+나중에 다시 시도하며, 어느 것도 훅 타임아웃보다 오래 턴을 붙잡을 수 없다.
+
+---
+
+## 메시지로 세션 시작하기 — 세션이 하나도 없을 때
+
+**"세션 끝나도 되게 해줘"** 는 환경마다 답이 다르다. 추측하지 말고 탐지한다:
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/reachability.mjs
+```
+
+OS·`claude` CLI·스케줄러·자격증명을 보고 후보 넷을 **확실성과 오버헤드로 채점해서** 하나를 고른다.
+설치는 하지 않는다 — 고르는 건 사용자다. 기준과 근거는 [`references/reachability.md`](references/reachability.md).
+
+훅과 감시자는 **이미 돌고 있는 세션 안에서만** 도움이 된다. 메시지가 세션을 *시작*하게 하려면 아무것도 안 돌 때
 도는 게 있어야 한다 — `bridge.mjs` 를 OS 스케줄러가 부른다.
 
 ```bash
@@ -349,60 +424,6 @@ Disable-ScheduledTask -TaskName 'claude-telegram'      # 끄기, 한 줄
 
 > **설치 전 반드시 말할 것:** 봇에게 메시지를 보낼 수 있는 사람은 그 머신에서 에이전트를 실행시킬 수 있다.
 > 막는 건 봇 토큰뿐이다. **대신 설치해주지 말고** 명령을 건네서 끄는 스위치를 사용자가 갖게 한다.
-
-## 자동 감지는 훅으로 — 습관이 아니라
-
-**스킬은 문서다.** 에이전트가 이미 행동할 때 무엇을 할지를 바꿀 뿐, 턴 안에서 수신함을 읽거나 보고를
-보내는 건 아무것도 없다. 그래서 "멈출 때 보내라"는 규칙이 계속 깨졌고 메시지도 안 읽혔다 — 둘 다
-에이전트의 기억력에 달려 있었기 때문이다.
-
-**훅은 하네스가 실행한다.** `Stop` 에 연결하면:
-
-```json
-{ "hooks": { "Stop": [{ "hooks": [{ "type": "command",
-  "command": "node ~/.claude/skills/telegram-notify/scripts/stop-hook.mjs", "timeout": 30 }] }] } }
-```
-
-매번 멈출 때 수신함을 읽고, **모드 3이면** 보고를 보내고, 새 메시지가 있으면 `decision: block` 으로
-돌려줘서 **턴이 끝나지 않고 답하게** 만든다. 무한루프는 불가능하다 — block 전에 메시지를 소비하므로
-다음 stop에서는 수신함이 비어 있다.
-
-모드 2는 일부러 자동 보고를 **안 한다.** 터미널이 이미 닿았고, 매 턴 끝마다 메시지를 보내는 것이
-P0-1이 막으려는 그 소음이다.
-
-## 모드 — 어디로 보고할까
-
-사용자가 **지금 어디에 있느냐**의 문제지 작업의 문제가 아니다.
-
-```bash
-node ~/.claude/skills/telegram-notify/scripts/mode.mjs      # 현재 모드
-node ~/.claude/skills/telegram-notify/scripts/mode.mjs 2    # 설정
-```
-
-| 모드 | 터미널 | 텔레그램 | 언제 |
-|---|---|---|---|
-| **1** | 전부 | **안 보냄** | 자리에 있음. 화면에 이미 있는 걸 또 울릴 이유가 없다 |
-| **2** | 전부 | 중요한 순간에만 | 기본값. 있지만 잠깐 나갈 수 있음 |
-| **3** | **짧게** | 전부 | 나가 있음. 터미널은 줄여 토큰을 아끼고, 보고는 메시지로 |
-
-모드 1에서는 `tg.mjs` 와 `report.mjs` 가 **보낼 내용을 출력만 하고 종료**한다. 잃는 것도 없고 울리지도 않는다.
-
-## 쓰기
-
-```bash
-# 상태 보고 (권장)
-node ~/.claude/skills/telegram-notify/scripts/report.mjs --now "테스트 작성" --done "재시도 로직 구현"
-node ~/.claude/skills/telegram-notify/scripts/report.mjs --blocked "서명 키 비밀번호 필요"
-node ~/.claude/skills/telegram-notify/scripts/report.mjs --dry          # 보내지 않고 형식만 확인
-
-# 임의 메시지
-node ~/.claude/skills/telegram-notify/scripts/tg.mjs "내용"
-echo "내용" | node ~/.claude/skills/telegram-notify/scripts/tg.mjs
-```
-
-성공하면 `200`만 출력한다.
-
----
 
 ## 구조
 

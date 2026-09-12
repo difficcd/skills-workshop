@@ -1,14 +1,19 @@
 ---
 name: telegram-notify
-description: Send the user a Telegram message, read what they sent back, or set the link up on a new machine. LOAD WHEN — the user asks to be messaged, briefed or notified; a long task finishes; you are blocked and need their answer; the user asks whether Telegram is connected or why it is not answering; a bot token or chat id needs configuring. DO NOT LOAD — building a periodic status report or heartbeat (a P0 violation), another messenger, or developing a Telegram bot itself.
+description: Two-way Telegram link between the user and the sessions on this machine - report to them when they are away, take their instructions from the phone, route a message to the session it names, wake an idle session when one arrives, and set the link up on a new machine. LOAD WHEN — the user asks to be messaged, briefed or notified; a long task finishes; you are blocked and need their answer; a Telegram message arrives for this session; the user wants to drive or check sessions from their phone; the user asks whether Telegram is connected or why it is not answering; a bot token, chat id, hook or watcher needs configuring. DO NOT LOAD — building a periodic status report or heartbeat (a P0 violation), another messenger, or developing a Telegram bot itself.
 ---
 
 # Telegram notify
 
-One line: **a channel you send down by hand.** No heartbeat, no poller, no cron, no hook.
+One line: **the user talks to the sessions on this machine from their phone, and the sessions
+talk back.** Leave the computer on; from Telegram, see which sessions are open, give one of them
+an instruction, get its report, wake it when it is idle.
 
-It is the only way an agent reaches a user who has walked away, and the easiest way to become
-noise. Half of this skill is how to send; the other half is how not to.
+Both directions are built to be quiet. Sending is by hand and on three occasions only — never a
+heartbeat, never a poll that reports. Receiving goes through the hooks and one watcher per
+session, which cost nothing when nobody writes. The only way an agent reaches a user who has
+walked away is also the easiest way to become noise, so half of this skill is how to send and
+how to listen; the other half is how not to.
 
 ---
 
@@ -317,8 +322,10 @@ node --test skills/telegram-notify/test/watch.test.mjs             # 6 tests
 
 ### What it costs — measured
 
-One machine, one bot, Node 22, Windows 11; the network figures are the round trip to
-`api.telegram.org` from that machine and will differ elsewhere.
+Measured on one laptop - Intel Core i5-1340P (12 cores / 16 threads), 16 GB RAM, Windows 11 Pro,
+Node 22 - with one bot. The network figures are the round trip to `api.telegram.org` from that
+machine and will differ by line; memory and CPU are a Node process's and should be similar
+anywhere.
 
 | Piece | When it runs | Cost |
 |---|---|---|
