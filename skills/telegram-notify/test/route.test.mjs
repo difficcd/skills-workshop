@@ -164,12 +164,13 @@ test('liveness folds the doubled separators in a transcript directory name onto 
 });
 
 test('a project whose path has spaces, dots or non-Latin characters is still found open', () => {
-    // The harness turns every non-alphanumeric character into a dash, one each, so
+    // The harness turns every non-alphanumeric character into a dash, one each, so (written with
+    // forward slashes so the name check holds on every OS; the fold treats both separators alike)
     // `C:\Users\me\Desktop\대학\3학년 2학기` lives under `C--Users-me-Desktop----3---2--`. The key
     // used to replace separators only, so this project - the author's own - read as "(never
     // run)" for ever and a `*` broadcast never reached it.
     reset();
-    route.register('C:\\Users\\me\\Desktop\\대학\\3학년 2학기');
+    route.register('C:/Users/me/Desktop/대학/3학년 2학기');
     route.register('/home/me/my_app.v2');
     transcript('C--Users-me-Desktop----3---2--', 0);
     transcript('-home-me-my-app-v2', 0);
@@ -183,7 +184,7 @@ test('a key written by the separator-only rule is folded onto the current one, k
     // The registry on a machine that ran the old rule holds the old key. It must not turn into a
     // second entry for the same folder - and it must start matching its transcript.
     reset({ next: 3, byKey: { 'c-users-me-desktop-대학-3학년 2학기': 2 }, names: {} });
-    const me = route.register('C:\\Users\\me\\Desktop\\대학\\3학년 2학기');
+    const me = route.register('C:/Users/me/Desktop/대학/3학년 2학기');
     assert.equal(me.n, 2, 'the number the user learned');
     assert.equal(me.fresh, false);
     assert.equal(route.list().length, 1, 'one entry, not two');
