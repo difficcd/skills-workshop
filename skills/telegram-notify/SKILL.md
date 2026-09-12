@@ -183,6 +183,8 @@ user puts the number at the front of the message.**
 
 ```
 2 run the tests        -> project 2, and nowhere else
+1,3 run the tests      -> projects 1 and 3, each once
+* run the tests        -> every session open at that moment
 run the tests          -> whoever stops first (right when only one session is open)
 ?                      -> the bot replies with the list
 ```
@@ -226,6 +228,13 @@ and takes only its own share out: messages addressed to its number, plus unaddre
 for a project that is not open waits there for it, and is dropped after a day so a message cannot
 surface out of nowhere a fortnight later.
 
+A message with several addressees stays in the spool until the last of them has taken it; each
+takes it once. `*` is resolved **when the message is spooled**, against the sessions open at that
+moment (the session doing the spooling counts as open even if its transcript has gone quiet), so
+"everyone" means everyone who was there when it was sent - a session opened tomorrow does not get
+today's broadcast, and a closed one is not waited for. Which sessions count as open is the same
+measurement the list shows.
+
 Each spool operation is a read, a decision, and a write back, and two Stop hooks can end a turn in
 the same second: both read the same array, both write, and the second rename wins - so a message
 one session already took reappears and is delivered twice. Atomic writes cannot fix that; only
@@ -239,7 +248,7 @@ first - which is fine with one session open, and a coin toss with two. Send `?` 
 the numbers.
 
 ```bash
-node --test skills/telegram-notify/test/route.test.mjs    # 16 tests
+node --test skills/telegram-notify/test/route.test.mjs    # 19 tests
 ```
 
 ### A watcher — a message wakes an idle session
@@ -263,13 +272,24 @@ session; `persistent: true`, because the point is to be there whenever the messa
 How it works: one `getUpdates` request held open for up to 50 s — Telegram's long poll, which is
 what the `waitSec` argument of `inbox()` in `tg-read.mjs` turns on (every other caller leaves it
 at 0 and returns at once). When something arrives it goes into the **same spool the Stop hook
-uses**, is acknowledged, and only this session's share comes out — its own number, or no number.
-Another session's mail stays in the spool for that session's own hook and does not wake this one.
-What is printed has already left the spool, so the next stop does not deliver it again. A `?`
-prints the session map for the agent to send back. Nothing is delivered twice, and nothing is
-delivered to the wrong session, because the routing code is the one the hook already runs.
+uses**, is acknowledged, and only this session's share comes out — its own number, `*`, or no
+number. Another session's mail stays in the spool for that session and does not wake this one.
+The spool is checked on **every pass**, not only after this process fetched something: a message
+addressed here may have been fetched by another session's hook or watcher, and Telegram will never
+show it to this one. What is printed has already left the spool, so the next stop does not deliver
+it again. Nothing is delivered twice, and nothing is delivered to the wrong session, because the
+routing code is the one the hook already runs.
 
-Answer with `tg.mjs`. The watcher never sends.
+Answer with `tg.mjs`. The watcher sends nothing on its own account; the one thing it answers is
+`?`, with the session map, when the mode allows sending — a question about the wiring, not worth
+waking a session for.
+
+**Two sessions, two watchers.** Telegram allows one open `getUpdates` per bot. A second watcher
+cuts the first off — measured: `Conflict: terminated by other getUpdates request` — and each side
+logs it, waits five seconds and asks again, so the two take turns. Nothing is lost: whichever
+request wins spools for both, and the other finds its share on its next pass. The cost is a few
+seconds of latency for the one that lost, and a line in stderr each time. Arm a watcher where the
+user says they will be writing; a session without one still gets its mail at its next stop.
 
 ```bash
 node ~/.claude/skills/telegram-notify/scripts/watch.mjs --once   # exit after the first message: checks the wiring

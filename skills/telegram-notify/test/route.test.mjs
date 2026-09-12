@@ -58,21 +58,29 @@ test('a leading number picks a session and is stripped off', () => {
         ['2) go', 2, 'go'],
         ['  3   spaced out', 3, 'spaced out'],
     ]) {
-        assert.deepEqual(route.parseRoute(input), { n, text: rest }, input);
+        assert.deepEqual(route.parseRoute(input), { to: [n], text: rest }, input);
     }
+});
+
+test('several numbers, or a star, address several sessions', () => {
+    assert.deepEqual(route.parseRoute('1,3 run the tests'), { to: [1, 3], text: 'run the tests' });
+    assert.deepEqual(route.parseRoute('1, 3 ,1 dedup'), { to: [1, 3], text: 'dedup' });
+    assert.deepEqual(route.parseRoute('* everyone'), { to: 'all', text: 'everyone' });
+    // A star glued to a word is punctuation, not an address.
+    assert.equal(route.parseRoute('*bold* text').to, null);
 });
 
 test('a number that is part of the sentence is not a route', () => {
     // The failure this pins is the expensive direction: a message silently delivered to the
     // wrong session, or to a session that does not exist and so to nobody at all.
     for (const input of ['2024 was when this started', '2go', '100 files changed', 'go 2 sleep']) {
-        assert.equal(route.parseRoute(input).n, null, input);
+        assert.equal(route.parseRoute(input).to, null, input);
     }
 });
 
 test('an empty or missing message does not throw', () => {
-    assert.deepEqual(route.parseRoute(''), { n: null, text: '' });
-    assert.deepEqual(route.parseRoute(undefined), { n: null, text: undefined });
+    assert.deepEqual(route.parseRoute(''), { to: null, text: '' });
+    assert.deepEqual(route.parseRoute(undefined), { to: null, text: undefined });
 });
 
 // ---- the registry --------------------------------------------------------------------------
@@ -202,6 +210,32 @@ test('a message is delivered once, not to every session', () => {
     route.spoolAdd([msg(1, 'unaddressed')]);
     assert.equal(route.spoolTake(1).length, 1);
     assert.equal(route.spoolTake(2).length, 0, 'the second session finds nothing');
+});
+
+test('a message for several sessions reaches each of them once, then leaves the spool', () => {
+    reset();
+    route.spoolAdd([msg(1, '1,3 both of you')]);
+    assert.deepEqual(route.spoolTake(2), [], 'not addressed to 2');
+    assert.deepEqual(route.spoolTake(1).map(m => m.text), ['both of you']);
+    assert.deepEqual(route.spoolTake(1), [], 'not twice to 1');
+    assert.deepEqual(route.spoolTake(3).map(m => m.text), ['both of you']);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(DIR, 'tg-spool.json'), 'utf8')), [], 'gone once the last has taken it');
+});
+
+test('a star goes to every session open when it was spooled, and counts the spooler as open', () => {
+    reset();
+    route.register('C:/work/alpha');   // 1
+    route.register('C:/work/beta');    // 2
+    route.register('C:/work/gamma');   // 3
+    transcript('C--work-alpha', 0);
+    transcript('C--work-beta', 90);    // closed
+    // Session 3 spools it: its transcript says nothing, but it is running this code.
+    route.spoolAdd([msg(1, '* all hands')], Date.now(), 3);
+    const [entry] = JSON.parse(fs.readFileSync(path.join(DIR, 'tg-spool.json'), 'utf8'));
+    assert.deepEqual(entry.to, [1, 3]);
+    assert.deepEqual(route.spoolTake(2), [], 'beta was closed when it was sent');
+    assert.deepEqual(route.spoolTake(1).map(m => m.text), ['all hands']);
+    assert.deepEqual(route.spoolTake(3).map(m => m.text), ['all hands']);
 });
 
 test('the same update arriving twice is spooled once', () => {

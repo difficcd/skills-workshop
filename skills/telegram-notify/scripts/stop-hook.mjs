@@ -51,7 +51,7 @@ async function main() {
     // session. The offset is a single acknowledgement for the whole bot, so reading at all takes
     // every project's mail; the spool is where the other projects' share waits for them.
     if (r.ok && r.messages.length) {
-        route.spoolAdd(mine(r.messages, creds.chat));
+        route.spoolAdd(mine(r.messages, creds.chat), Date.now(), me.n);
         const last = Math.max(...r.messages.map(m => m.updateId));
         try { await inbox(creds, last + 1); } catch { }
     }
@@ -63,7 +63,7 @@ async function main() {
     const asked = msgs.filter(m => route.isMapRequest(m.text));
     msgs = msgs.filter(m => !route.isMapRequest(m.text));
     if (asked.length || me.fresh) {
-        try { await tg.send(route.formatMap(me.list), creds); } catch { }
+        try { await tg.send(route.formatMap(), creds); } catch { }
     }
 
     if (mode().id === 3) {

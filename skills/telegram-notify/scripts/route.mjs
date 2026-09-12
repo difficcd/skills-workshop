@@ -10,7 +10,8 @@
 //
 //     2 run the tests
 //
-// goes to project 2 and nowhere else. A message with no number goes to whoever reads it first,
+// goes to project 2 and nowhere else; `1,3 run the tests` goes to both, and `* run the tests` to
+// every session open at that moment. A message with no number goes to whoever reads it first,
 // which is the right default when only one session is running - the common case, and the one
 // that should not need a prefix. Send `?` to be told the numbers.
 //
@@ -182,26 +183,45 @@ export const formatMap = (rows = list()) => {
     if (!rows.length) return 'No sessions have registered yet.';
     const age = (r) => r.ageMin == null ? '  (never run)' : r.live ? (r.ageMin <= 1 ? '' : `  (${r.ageMin}m ago)`) : '  (closed)';
     const body = rows.map(r => `${r.n} ${r.name}${age(r)}`).join('\n');
-    return `Put the number first to pick a session:\n${body}\n\nNo number = whichever session stops first.`;
+    return `Put the number first to pick a session:\n${body}\n\n1,3 = both. * = every open session. No number = whichever session stops first.`;
 };
 
 /** True for a message that is asking to be shown the map rather than saying something. */
 export const isMapRequest = (text) => /^\s*[?？]\s*$/.test(text) || /^\s*(map|세션|목록)\s*$/i.test(text);
 
 /**
- * Split a leading session number off a message.
+ * Split the address off the front of a message.
  *
- * Only a bare number counts, and only with a separator after it, so "2 run the tests" is routed
- * and "2024 was when this started" is not.
+ *     2 run the tests       -> [2]        that session, and nowhere else
+ *     1,3 run the tests     -> [1, 3]     each of them
+ *     * run the tests       -> 'all'      every session open when the message is spooled
+ *     run the tests         -> null       whichever session reads it first
+ *
+ * Only a bare number counts, and only with a separator after it, so "2024 was when this started"
+ * is not routed. `*` is the whole address, not a prefix on a number.
  *
  * @param {string} text
- * @returns {{n: number|null, text: string}}
+ * @returns {{to: number[]|'all'|null, text: string}}
  */
 export function parseRoute(text) {
-    const m = /^\s*(\d{1,2})(?:\s+|[.:)]\s*)([\s\S]*)$/.exec(text || '');
-    if (!m) return { n: null, text };
-    return { n: Number(m[1]), text: m[2] };
+    const m = /^\s*(\*|\d{1,2}(?:\s*,\s*\d{1,2})*)(?:\s+|[.:)]\s*)([\s\S]*)$/.exec(text || '');
+    if (!m) return { to: null, text };
+    const to = m[1] === '*' ? 'all' : [...new Set(m[1].split(',').map(s => Number(s.trim())))];
+    return { to, text: m[2] };
 }
+
+/**
+ * `all`, resolved: the sessions open right now. `self` is the session doing the resolving, which
+ * is open by definition even when its transcript has gone quiet enough to read as closed.
+ *
+ * Resolved when the message is spooled, not when it is taken, so "everyone" means everyone who
+ * was there when it was sent - a session opened tomorrow does not get today's broadcast.
+ */
+const openNow = (self) => {
+    const open = list().filter(r => r.live).map(r => r.n);
+    if (self != null && !open.includes(self)) open.push(self);
+    return open.length ? open : null;
+};
 
 // ------------------------------------------------------------------------------------------
 // The spool.
@@ -256,14 +276,26 @@ function withLock(fn, { tries = 40, staleMs = 60_000, waitMs = 25 } = {}) {
     return fn();
 }
 
-/** Add fetched messages to the spool, ignoring ones already in it. Returns the whole spool. */
-export function spoolAdd(messages, now = Date.now()) {
+/**
+ * Add fetched messages to the spool, ignoring ones already in it. Returns the whole spool.
+ *
+ * Each entry carries `to`: the numbers still waiting to take it, or null for "whoever is first".
+ * `*` is resolved here, against the sessions open now, with `self` (the session spooling) counted
+ * as open - see `openNow`.
+ *
+ * @param {number} [self] the number of the session doing the spooling
+ */
+export function spoolAdd(messages, now = Date.now(), self = null) {
     return withLock(() => {
         // Aged out here rather than on a timer: a message for a project that is not open today
         // would otherwise sit in the file for ever and arrive, out of nowhere, weeks later.
         const spool = readJson(SPOOL, []).filter(m => now - Date.parse(m.at || 0) < SPOOL_TTL_MS);
         const have = new Set(spool.map(m => m.updateId));
-        for (const m of messages) if (!have.has(m.updateId)) spool.push(m);
+        for (const m of messages) {
+            if (have.has(m.updateId)) continue;
+            const { to } = parseRoute(m.text);
+            spool.push({ ...m, to: to === 'all' ? openNow(self) : to });
+        }
         writeJson(SPOOL, spool);
         return spool;
     });
@@ -273,7 +305,9 @@ export function spoolAdd(messages, now = Date.now()) {
  * Remove and return the messages this session should act on: the ones addressed to it, and the
  * ones addressed to nobody.
  *
- * The route prefix is stripped, so the agent is handed what the user actually wrote.
+ * A message with several addressees is handed to each and leaves the spool with the last of
+ * them; one with none is taken whole by the first session to ask. The address is stripped, so
+ * the agent is handed what the user actually wrote.
  *
  * @param {number} n this session's number
  */
@@ -282,10 +316,15 @@ export function spoolTake(n) {
         const spool = readJson(SPOOL, []);
         const taken = [], left = [];
         for (const m of spool) {
-            const r = parseRoute(m.text);
-            if (r.n === n) taken.push({ ...m, text: r.text });
-            else if (r.n == null) taken.push(m);
-            else left.push(m);
+            // An entry spooled before `to` existed carries only its text; read the address off that.
+            let to = m.to !== undefined ? m.to : parseRoute(m.text).to;
+            if (to === 'all') to = openNow(n);
+            if (to == null) { taken.push(m); continue; }
+            if (!to.includes(n)) { left.push(m); continue; }
+            const { to: _, ...rest } = m;
+            taken.push({ ...rest, text: parseRoute(m.text).text });
+            const others = to.filter(x => x !== n);
+            if (others.length) left.push({ ...m, to: others });
         }
         writeJson(SPOOL, left);
         return taken;
