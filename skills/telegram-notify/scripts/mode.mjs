@@ -55,14 +55,26 @@ export const canSend = (m = mode()) => m.telegram;
 export function setMode(n) {
     const want = MODES[Number(n)];
     if (!want) throw new Error(`mode must be 1, 2 or 3 - got ${n}`);
+    setKey('TG_MODE', String(want.id));
+    return want;
+}
+
+/** One `KEY='value'` line in the credentials file, replaced in place or appended. */
+export function setKey(key, value) {
     const text = read();
-    const line = `TG_MODE='${want.id}'`;
-    const next = /^\s*TG_MODE\s*=/m.test(text)
-        ? text.replace(/^\s*TG_MODE\s*=.*$/m, line)
+    const line = `${key}='${value}'`;
+    const next = new RegExp(`^\\s*${key}\\s*=`, 'm').test(text)
+        ? text.replace(new RegExp(`^\\s*${key}\\s*=.*$`, 'm'), line)
         : (text.trimEnd() + (text.trim() ? '\n' : '') + line + '\n');
     mkdirSync(dirname(ENV_FILE), { recursive: true });
     writeFileSync(ENV_FILE, next, { encoding: 'utf8', mode: 0o600 });
-    return want;
+}
+
+/** A key's value, environment first, then the file; undefined when set nowhere. */
+export function getKey(key) {
+    if (process.env[key] != null) return process.env[key];
+    const m = read().match(new RegExp(`^\\s*${key}\\s*=\\s*['"]?([^'"\\r\\n]*)`, 'm'));
+    return m ? m[1].trim() : undefined;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

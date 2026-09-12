@@ -49,3 +49,20 @@ test('an offset still acknowledges, whether or not the call waits', async () => 
     assert.equal(url.searchParams.get('offset'), '42');
     assert.equal(url.searchParams.get('timeout'), '50');
 });
+
+test('the arm instruction exists only while the watcher is switched on', async () => {
+    const { armInstruction, wanted } = await import('../scripts/watch.mjs');
+    process.env.TG_WATCH = '0';
+    assert.equal(wanted(), false);
+    assert.equal(armInstruction(), '');
+    process.env.TG_WATCH = '1';
+    assert.equal(wanted(), true);
+    const text = armInstruction();
+    assert.match(text, /Monitor\(\{ command: 'node "[^"]*\/watch\.mjs"'/, 'the exact call, forward slashes');
+    assert.match(text, /persistent: true/);
+    delete process.env.TG_WATCH;
+});
+
+test('session-start.mjs loads without running', async () => {
+    await assert.doesNotReject(() => import('../scripts/session-start.mjs'));
+});

@@ -165,8 +165,14 @@ What it takes out of the inbox is only **its own** mail — see "Several session
 Mode 2 deliberately does **not** auto-report: the terminal already reached them, and a message on
 every turn end is the noise P0-1 exists to prevent. There, P0-6 stays a judgement call.
 
-Optionally on `SessionStart`, `tg-read.mjs` (without `--consume`) starts a session knowing what is
-already waiting.
+On `SessionStart`, `session-start.mjs` prints what is already waiting (unconsumed) into the new
+session's context - and, when the watcher is switched on for the machine, the instruction to arm
+it (see "A watcher"):
+
+```json
+{ "hooks": { "SessionStart": [{ "hooks": [{ "type": "command",
+  "command": "node ~/.claude/skills/telegram-notify/scripts/session-start.mjs", "timeout": 20 }] }] } }
+```
 
 Any failure prints nothing and exits 0 — a broken notifier must never be able to trap a session.
 
@@ -266,8 +272,20 @@ Monitor({ command: 'node ~/.claude/skills/telegram-notify/scripts/watch.mjs',
           description: 'Telegram messages for this session', persistent: true })
 ```
 
-Arm it when the user says they will write from Telegram while the session stays open. One per
-session; `persistent: true`, because the point is to be there whenever the message comes.
+**Arming it is the session's job, not the user's.** One setting for the machine:
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/watch.mjs --on      # every new session arms one at start
+node ~/.claude/skills/telegram-notify/scripts/watch.mjs --off     # back to arming by hand
+```
+
+While it is on, the `SessionStart` hook prints the exact `Monitor(...)` call above into every new
+session's context, and **the session's first act is to run it** - before reading the user's
+request, before anything else. That is what turns "tell each window to listen" into a switch the
+user flips once. A session that starts without the hook, or with the setting off, arms it when the
+user says they will be writing from Telegram. One per session; `persistent: true`, because the
+point is to be there whenever the message comes. `install.mjs` shows whether the setting and the
+hook agree.
 
 How it works: one `getUpdates` request held open for up to 50 s — Telegram's long poll, which is
 what the `waitSec` argument of `inbox()` in `tg-read.mjs` turns on (every other caller leaves it
@@ -293,7 +311,7 @@ user says they will be writing; a session without one still gets its mail at its
 
 ```bash
 node ~/.claude/skills/telegram-notify/scripts/watch.mjs --once   # exit after the first message: checks the wiring
-node --test skills/telegram-notify/test/watch.test.mjs             # 4 tests
+node --test skills/telegram-notify/test/watch.test.mjs             # 6 tests
 ```
 
 **Its relation to P0-1.** That rule bans loops that *send* — heartbeats, periodic reports, anything

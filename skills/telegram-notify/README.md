@@ -194,8 +194,25 @@ Monitor({ command: 'node ~/.claude/skills/telegram-notify/scripts/watch.mjs',
           description: 'Telegram messages for this session', persistent: true })
 ```
 
-사용자가 "세션은 열어 둘 테니 텔레그램으로 보내겠다"고 할 때 켠다. 세션당 하나면 되고,
-`persistent: true` 로 켠다 — 메시지가 언제 오든 거기 있는 것이 목적이니까.
+**켜는 것은 사용자가 아니라 세션의 일이다.** 머신 단위 설정 하나:
+
+```bash
+node ~/.claude/skills/telegram-notify/scripts/watch.mjs --on      # 새 세션마다 시작 시 감시자를 켠다
+node ~/.claude/skills/telegram-notify/scripts/watch.mjs --off     # 다시 수동으로
+```
+
+켜져 있는 동안 `SessionStart` 훅(`session-start.mjs`)이 위의 `Monitor(...)` 호출을 그대로 새 세션의
+컨텍스트에 찍어 주고, **세션의 첫 행동이 그것을 실행하는 것**이다 — 사용자의 요청을 읽기 전에, 무엇보다
+먼저. 이것이 "창마다 들으라고 말해 주기"를 한 번 올리는 스위치로 바꾼다. 훅 없이 시작했거나 설정이
+꺼져 있으면, 사용자가 "텔레그램으로 보내겠다"고 할 때 켠다. 세션당 하나면 되고, `persistent: true`
+로 켠다 — 메시지가 언제 오든 거기 있는 것이 목적이니까. 설정과 훅이 맞는지는 `install.mjs` 가 보여 준다.
+
+훅 등록 (`~/.claude/settings.json`):
+
+```json
+{ "hooks": { "SessionStart": [{ "hooks": [{ "type": "command",
+  "command": "node ~/.claude/skills/telegram-notify/scripts/session-start.mjs", "timeout": 20 }] }] } }
+```
 
 동작 원리: `getUpdates` 요청 하나를 최대 50초 열어 둔다 — 텔레그램의 롱 폴이고, `tg-read.mjs` 의
 `inbox()` 에 붙은 `waitSec` 인자가 그것을 켠다 (다른 호출자는 전부 0, 즉시 반환). 무언가 도착하면
@@ -217,7 +234,7 @@ Monitor({ command: 'node ~/.claude/skills/telegram-notify/scripts/watch.mjs',
 
 ```bash
 node ~/.claude/skills/telegram-notify/scripts/watch.mjs --once   # 첫 메시지 하나 받고 종료: 배선 확인용
-node --test skills/telegram-notify/test/watch.test.mjs             # 테스트 4개
+node --test skills/telegram-notify/test/watch.test.mjs             # 테스트 6개
 ```
 
 **P0-1 과의 관계.** 그 규칙이 막는 것은 *보내는* 루프다 — heartbeat, 주기 보고, 아무도 묻지 않은
@@ -350,6 +367,7 @@ skills/telegram-notify/
     ├── bridge.mjs            # 메시지로 세션 시작 (OS 스케줄러가 호출, 루프 아님)
     ├── install-bridge.ps1    # 윈도우 작업 설치기 — Stop 훅과 충돌하면 거부한다
     ├── tg-read.mjs           # 사용자가 보낸 메시지를 온디맨드로 읽기 (루프 아님)
+    ├── session-start.mjs     # SessionStart 훅 — 기다리는 메시지 + (켜져 있으면) 감시자 켜라는 지시
     ├── watch.mjs             # Monitor 아래에서 돌리는 감시자 — 메시지가 놀고 있는 세션을 깨운다
     ├── reachability.mjs      # 세션 밖에서 닿을 수 있나 — 환경 탐지 (설치는 안 함)
     ├── tg.mjs                # 임의 메시지 전송

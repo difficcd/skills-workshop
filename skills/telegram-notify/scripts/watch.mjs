@@ -31,16 +31,42 @@
 // other off with 409 Conflict; each logs it, waits, and asks again. Nothing is lost, because
 // whichever request wins spools for both, but delivery to the loser waits for its next pass.
 //
+// Arming it is the session's job, not the user's. With `--on`, the SessionStart hook
+// (`session-start.mjs`) tells every new session to arm it before doing anything else, so the
+// user does not have to remember which window they said it to; `--off` makes the hook say
+// nothing again. One setting for the machine, in the same file as the mode.
+//
 //   node watch.mjs            print one line per message for this session, for ever
 //   node watch.mjs --once     exit after the first one (for testing the wiring)
+//   node watch.mjs --on       every new session arms a watcher at start
+//   node watch.mjs --off      back to arming by hand
+//   node watch.mjs --status   which of the two is in force
 //
 // Node 18+, no dependencies.
 
-import { pathToFileURL } from 'node:url';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { credentials, send } from './tg.mjs';
-import { canSend } from './mode.mjs';
+import { canSend, getKey, setKey } from './mode.mjs';
 import { inbox, mine } from './tg-read.mjs';
 import { register, spoolAdd, spoolTake, isMapRequest, formatMap } from './route.mjs';
+
+const KEY = 'TG_WATCH';       // '1' when every session should arm a watcher at start
+const HERE = dirname(fileURLToPath(import.meta.url));
+
+/** Whether new sessions arm a watcher by themselves. */
+export const wanted = () => getKey(KEY) === '1';
+
+/**
+ * What the SessionStart hook prints when the watcher is wanted: the exact call, so the session
+ * arms it as its first act rather than reconstructing it from the docs. Empty when it is not.
+ */
+export const armInstruction = () => !wanted() ? '' : [
+    'Telegram watcher is ON for this machine (node watch.mjs --off to turn it off).',
+    'Arm it now, before anything else, and keep it for the whole session:',
+    `  Monitor({ command: 'node "${join(HERE, 'watch.mjs').replace(/\\/g, '/')}"', description: 'Telegram messages for this session', persistent: true })`,
+    'Each line it prints is a message the user sent from Telegram. Answer it there, with tg.mjs.',
+].join('\n');
 
 const WAIT_SEC = 50;          // Telegram's maximum for one long poll
 const RETRY_MS = 5_000;       // after a failed request, so a flapping network does not spin
@@ -103,5 +129,13 @@ async function main() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-    main().catch(e => { log(`watch: ${e && e.message ? e.message : e}`); process.exit(1); });
+    const argv = process.argv.slice(2);
+    if (argv.includes('--on') || argv.includes('--off')) setKey(KEY, argv.includes('--on') ? '1' : '0');
+    if (argv.includes('--on') || argv.includes('--off') || argv.includes('--status')) {
+        console.log(wanted()
+            ? 'watcher: on - every new session arms one at start (needs the SessionStart hook, see SKILL.md)'
+            : 'watcher: off - arm by hand when the user says they will write from Telegram');
+    } else {
+        main().catch(e => { log(`watch: ${e && e.message ? e.message : e}`); process.exit(1); });
+    }
 }

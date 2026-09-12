@@ -23,7 +23,7 @@ import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { credentials } from './tg.mjs';
-import { mode } from './mode.mjs';
+import { mode, getKey } from './mode.mjs';
 import { probe } from './reachability.mjs';
 
 const SCRIPTS = join(homedir(), '.claude', 'skills', 'telegram-notify', 'scripts');
@@ -64,7 +64,7 @@ export function permissionRules(scripts = SCRIPTS) {
 /** The hook block, so the agent does not have to reconstruct it from the docs. */
 export const hookBlock = (scripts = SCRIPTS) => ({
     Stop: [{ hooks: [{ type: 'command', command: `node "${scripts}/stop-hook.mjs"`, timeout: 30, statusMessage: 'Telegram: checking inbox' }] }],
-    SessionStart: [{ hooks: [{ type: 'command', command: `node "${scripts}/tg-read.mjs"`, timeout: 20 }] }],
+    SessionStart: [{ hooks: [{ type: 'command', command: `node "${scripts}/session-start.mjs"`, timeout: 20 }] }],
 });
 
 /** What is true right now, step by step. */
@@ -78,6 +78,8 @@ export function status() {
         credentials: !!(creds.token && creds.chat),
         mode: mode().id,
         hooks: !!st?.hooks?.Stop,
+        sessionStart: JSON.stringify(st?.hooks?.SessionStart || '').includes('session-start.mjs'),
+        watcher: getKey('TG_WATCH') === '1',
         permissions: want.filter(r => !rules.includes(r)),
         cli: p.cli,
         scheduler: p.scheduler,
@@ -104,6 +106,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log(step(s.hooks, 3, s.hooks
         ? 'Stop hook wired - the inbox is read when a turn ends'
         : 'no Stop hook. AGENT: merge install.mjs --json hookBlock into ~/.claude/settings.json'));
+    console.log(step(s.watcher ? s.sessionStart : true, '3b', s.watcher
+        ? (s.sessionStart
+            ? 'watcher on - every new session arms one from the SessionStart hook'
+            : 'watcher on but no SessionStart hook to say so. AGENT: merge install.mjs --json hookBlock')
+        : 'watcher off - sessions arm it by hand (watch.mjs --on to change)'));
     console.log(step(s.permissions.length === 0, 4, s.permissions.length === 0
         ? 'permissions granted'
         : `${s.permissions.length} permission rule(s) missing - USER: paste \`install.mjs --perms\` into ~/.claude/settings.json`));
