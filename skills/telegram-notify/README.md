@@ -7,7 +7,7 @@ rules for when to send and when not to, and a fixed status-report format that an
 question free text cannot — *is this session still alive?* — are all included.
 
 Node 18+, zero dependencies. Built for Claude Code; the pieces are plain scripts, see
-[Portability](#portability). 한국어: [README.ko.md](README.ko.md).
+[Portability](#portability). Korean: [README.ko.md](README.ko.md).
 
 ```
 phone                                   computer (just switched on)
