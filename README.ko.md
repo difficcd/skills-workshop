@@ -12,6 +12,7 @@ Claude Code 용 개인 스킬 모음. English: [README.md](README.md).
 | [**monotone-accent-ui**](skills/monotone-accent-ui/) ([한국어](skills/monotone-accent-ui/README.ko.md)) | 무채색 표면 + 단일 포인트색(액센트)으로 다크/라이트를 함께 지탱하는 UI 시스템. 토큰·액센트 농도 사다리·실측 스케일, 컴포넌트 레시피 14종, 화면 구성 UX 패턴 13종, 의존성 없는 위반 검사기 |
 | [**engineering-guardrails**](skills/engineering-guardrails/) ([한국어](skills/engineering-guardrails/README.ko.md)) | 나중에 대규모 리팩토링을 하게 만드는 구조적 부채를 애초에 안 쌓는 규칙. 4,300줄 컴포넌트를 뜯어내며 나온 것들 — **이음매 비용 측정기**, 조용한 실패 목록, 파생 vs 저장, 상시 검사 2종(+ 프로젝트별로 작성하는 레시피 3종)과 기준선 쓰는 법 |
 | [**telegram-notify**](skills/telegram-notify/) ([한국어](skills/telegram-notify/README.ko.md)) | **컴퓨터만 켜 두면 폰의 텔레그램으로 세션들을 관리하고 지시한다.** 에이전트는 보고하고, 사용자는 답장으로 지시하고, 번호로 세션을 고르고(`1 …`, `1,3 …`, `* …`), 놀고 있는 세션은 메시지가 오면 깨어난다. 2분 연동, 보낼 때/안 보낼 때의 기준, **절반을 기계가 채워 "세션이 아직 살아 있나"에 답하는 고정 보고 형식**, 실측한 오버헤드. Node 18+, 의존성 0 |
+| [**ask-first**](skills/ask-first/) ([한국어](skills/ask-first/README.ko.md)) | **요청이 두 가지 이상으로 읽히면 만들기 전에 묻는다** — 문턱은 사용자가 정한다: `high`는 진짜 갈림길에 잘못 짚으면 비쌀 때만, `mid`는 작업이 실질적으로 달라질 때, `low`는 조금이라도 애매하면. 한 턴에 질문 하나, 추천안 먼저, 자리 비운 사용자가 막히지 않도록 기본값 하나. 훅이 강도를 세션 너머로 유지 |
 
 ## 설치
 
