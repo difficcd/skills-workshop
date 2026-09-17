@@ -323,3 +323,15 @@ test('a broadcast from a session reaches every open session but itself', () => {
     assert.deepEqual(route.spoolTake(3), []);
     assert.deepEqual(route.spoolTake(2).map(m => m.text), ['(session 1) releasing in 5 minutes']);
 });
+
+test('a reply opens with the session number and name, and an unregistered directory adds nothing', () => {
+    // Several sessions share one chat; the number in front is both who is talking and what to
+    // type to answer them. Read-only: tagging must not mint a number for a scratch worktree.
+    reset();
+    route.register('C:/Users/me/Desktop/easy-mv-maker');
+    assert.equal(route.sessionTag('C:/Users/me/Desktop/easy-mv-maker'), '1 easy-mv-maker');
+    assert.equal(route.tagged('done', route.sessionTag('C:/Users/me/Desktop/easy-mv-maker')), '[1 easy-mv-maker] done');
+    assert.equal(route.sessionTag('C:/Users/me/tmp/emv-work'), '');
+    assert.equal(route.tagged('done', ''), 'done');
+    assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(DIR, 'tg-sessions.json'), 'utf8')).byKey).length, 1);
+});

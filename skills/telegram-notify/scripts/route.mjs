@@ -242,6 +242,29 @@ export function tell(target, text, from) {
     return to;
 }
 
+/**
+ * "2 easy-mv-maker" - this session's number and name, for the front of anything it sends.
+ *
+ * The user reads replies from several sessions in one chat. A message that opens with its number
+ * says who is talking and, since the number is the address, what to type to answer it. Read-only:
+ * a directory that was never registered gets an empty tag rather than a number, so a script run
+ * from a scratch worktree does not mint a session. `TG_SESSION_DIR` names the project when the
+ * script is run from somewhere else on its behalf.
+ *
+ * @param {string} [dir]
+ * @returns {string} `''` when this directory has no number
+ */
+export function sessionTag(dir = process.env.TG_SESSION_DIR || process.cwd()) {
+    const reg = migrate(readJson(SESSIONS, { byKey: {}, names: {} }));
+    const key = projectKey(dir);
+    const n = reg.byKey[key];
+    if (n == null) return '';
+    return `${n} ${(reg.names || {})[key] || projectName(dir)}`;
+}
+
+/** `text` with the session tag in front, or untouched when there is none. */
+export const tagged = (text, tag = sessionTag()) => (tag ? `[${tag}] ${text}` : text);
+
 /** Every project that has ever registered, lowest number first, each marked open or not. */
 export const list = () => listOf(migrate(readJson(SESSIONS, { byKey: {} })), activity());
 

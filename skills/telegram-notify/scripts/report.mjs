@@ -21,6 +21,7 @@ import { execFileSync } from 'node:child_process';
 import { basename } from 'node:path';
 import { credentials, send } from './tg.mjs';
 import { mode, canSend } from './mode.mjs';
+import { tagged } from './route.mjs';
 
 const flag = (name) => {
     const i = process.argv.indexOf(`--${name}`);
@@ -128,7 +129,7 @@ if (process.argv[1] && import.meta.url === (await import('node:url')).pathToFile
         console.error(text);
         process.exit(2);
     }
-    const r = await send(text, creds);
+    const r = await send(tagged(text), creds);
     if (!r.ok) { console.error(r.status); process.exit(1); }
     console.log(r.status);
 }

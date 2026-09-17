@@ -7,6 +7,9 @@
 //   node tg.mjs "message"
 //   echo "message" | node tg.mjs
 //
+// Sent as `[2 easy-mv-maker] message` - the session's number and name, from the registry in
+// route.mjs - so the user can tell which session is talking when several share the chat.
+//
 // Node 18+, no dependencies (global fetch). Credentials come from the environment first, then
 // ~/.claude/local/telegram.env - neither of which belongs in a repository.
 
@@ -15,6 +18,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { mode, canSend } from './mode.mjs';
+import { tagged } from './route.mjs';
 
 export const ENV_FILE = process.env.TG_ENV_FILE || join(homedir(), '.claude', 'local', 'telegram.env');
 
@@ -110,7 +114,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const text = (process.argv.slice(2).join(' ') || await readStdin()).trim();
     if (!text) { console.error('nothing to send'); process.exit(1); }
 
-    const r = await send(text, creds);
+    // Who is talking, in front: several sessions share this chat.
+    const r = await send(tagged(text), creds);
     if (!r.ok) {
         // The body says which failure it is - wrong token, blocked bot, bad chat id. Printing it
         // is the difference between fixing it and guessing.

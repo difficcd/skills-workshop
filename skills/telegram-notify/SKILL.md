@@ -52,6 +52,10 @@ node <s>/report.mjs --blocked "what only the user can do"            # 🔴 in t
 node <s>/tg.mjs "text"        # anything else; `echo text | node <s>/tg.mjs` works too
 ```
 
+Every reply arrives as `[2 easy-mv-maker] text` — this session's number and name in front, so
+the user can tell which session is talking and knows what to type to answer it. Run the scripts
+from the project directory (or set `TG_SESSION_DIR`); an unregistered directory sends untagged.
+
 `report.mjs` appends a machine-written line — clock, branch, last commit and its age, uncommitted
 count — so two reports side by side show whether anything moved, whatever the prose says. Field
 rules: [references/reporting.md](references/reporting.md). Both print `200` on success; with no

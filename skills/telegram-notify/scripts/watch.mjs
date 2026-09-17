@@ -53,7 +53,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { credentials, send } from './tg.mjs';
 import { canSend, getKey, setKey } from './mode.mjs';
 import { inbox, mine } from './tg-read.mjs';
-import { register, spoolAdd, spoolTake, isMapRequest, formatMap } from './route.mjs';
+import { register, spoolAdd, spoolTake, isMapRequest, formatMap, list, tagged } from './route.mjs';
 
 const KEY = 'TG_WATCH';       // '1' when every session should arm a watcher at start
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -91,6 +91,20 @@ const lostThePoll = (err) => /terminated by other getUpdates/i.test(String(err))
  * so. This is for the end that is not observed - the harness dying without cleaning up - so a
  * watcher cannot outlive its session and keep contending for the poll with nobody to wake.
  */
+/**
+ * "→ 3 3학년 2학기 (closed)" - where a message went, and whether anyone is there to read it.
+ * @param {number[]} to
+ */
+const receipt = (to) => {
+    const rows = list();
+    const line = (n) => {
+        const r = rows.find(x => x.n === n);
+        if (!r) return `${n} (unknown)`;
+        return r.live ? `${n} ${r.name}` : `${n} ${r.name} (closed)`;
+    };
+    return `→ ${to.map(line).join(', ')}`;
+};
+
 const parentAlive = () => { try { process.kill(process.ppid, 0); return true; } catch { return false; } };
 
 /**
@@ -156,6 +170,16 @@ async function main() {
         for (const m of ours) {
             const e = spool.find(x => x.updateId === m.updateId);
             log(`spooled #${m.updateId} for ${e && e.to !== undefined ? JSON.stringify(e.to) : 'anyone'}`);
+            // And a receipt to the phone when it went somewhere other than here. A wrong number
+            // is otherwise silent: the message sits in another session's spool and the user
+            // sees nothing but a bot that stopped answering. Fourteen messages went to a closed
+            // project that way before anyone noticed the prefix. One line back - which session
+            // took it, and whether that session is even open - turns twenty minutes into two
+            // seconds. Only the watcher that fetched the message sends it, so there is one.
+            const to = e && Array.isArray(e.to) ? e.to : null;
+            if (to && !to.includes(me.n) && canSend()) {
+                try { await send(tagged(receipt(to)), creds); } catch { }
+            }
         }
         const last = Math.max(...r.messages.map(m => m.updateId));
         try { await inbox(creds, last + 1); } catch { }
