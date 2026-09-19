@@ -22,6 +22,7 @@ incidents that produced it: **[references/design.md](references/design.md)**.
 | 0-4 | **Read it as the user before sending.** No progress narration, no self-reporting | See "When to send" |
 | 0-5 | If the user says stop, **kill the processes too** — deleting a script does not stop a shell that already read it. `pkill -f 'sendMessage\|tg_heartbeat\|tg_poll'`, then check cron / Task Scheduler / harness background tasks | Messages kept arriving for hours after the files were gone |
 | 0-6 | **Never end a turn on "I will keep going" without sending** (modes 2–3). Send *before* the closing message | From the outside that is indistinguishable from a crash |
+| 0-7 | **Going idle is a send.** When the queue is empty and you are about to stop, one line: that you are pausing, that a message resumes you, and what is left on *their* side (tests to run, a decision to make) | "Why did you go quiet" — a session that stops without saying so reads as dead, and the user's own to-dos stay unread in scrollback |
 
 ## Mode — ask once, then obey it
 
@@ -40,6 +41,7 @@ stop is a send** (P0-6): finished, blocked, waiting, or "I will carry on next tu
 
 1. **The user asked** — briefing, update, ping
 2. **Work stops** — finished, blocked, waiting on an answer. The one worth most
+   — and **idle** counts: nothing left to do is a stop too (P0-7). `잠시 멈춥니다 — 메시지 주시면 이어감` plus their side of the list.
 3. **You judge it worth it** — rarely: a long job finished, something hard to undo happened
 
 Test: *would they have acted differently had they known while away?* If not, write it to the terminal.
