@@ -18,7 +18,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { mode, canSend } from './mode.mjs';
-import { tagged } from './route.mjs';
+import { tagged, sessionTag } from './route.mjs';
 
 export const ENV_FILE = process.env.TG_ENV_FILE || join(homedir(), '.claude', 'local', 'telegram.env');
 
@@ -62,6 +62,22 @@ export const scrub = (s) => String(s).replace(/bot\d{6,}:[A-Za-z0-9_-]{20,}/g, '
 export function fit(text, max = MAX) {
     if (text.length <= max) return text;
     return `${text.slice(0, max - 40)}\n… (truncated)`;
+}
+
+/**
+ * Why a message with no session tag must not go: several sessions share the chat, and a line
+ * with no number in front cannot be told from another session's. The tag comes from the
+ * directory the script runs in, so a send from a scratch folder or a temp worktree would go
+ * out anonymous and nobody would notice until the user asked which session was talking.
+ *
+ * @param {string} tag from sessionTag(); '' when the directory is not a registered session
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string | null} the refusal, or null when the send may go
+ */
+export function untaggedRefusal(tag, env = process.env) {
+    if (tag || env.TG_UNTAGGED) return null;
+    return 'not sent: this directory is not a registered session, so the message would carry no [number name] tag.\n'
+        + 'run from the project directory, or set TG_SESSION_DIR=<project dir>; TG_UNTAGGED=1 sends it anonymous on purpose.';
 }
 
 export async function send(text, creds = credentials()) {
@@ -114,8 +130,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const text = (process.argv.slice(2).join(' ') || await readStdin()).trim();
     if (!text) { console.error('nothing to send'); process.exit(1); }
 
-    // Who is talking, in front: several sessions share this chat.
-    const r = await send(tagged(text), creds);
+    // Who is talking, in front: several sessions share this chat. No tag, no send.
+    const tag = sessionTag();
+    const refusal = untaggedRefusal(tag);
+    if (refusal) { console.error(refusal); process.exit(3); }
+    const r = await send(tagged(text, tag), creds);
     if (!r.ok) {
         // The body says which failure it is - wrong token, blocked bot, bad chat id. Printing it
         // is the difference between fixing it and guessing.
