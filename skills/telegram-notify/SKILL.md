@@ -16,7 +16,7 @@ incidents that produced it: **[references/design.md](references/design.md)**.
 
 | # | Rule | Why |
 |---|---|---|
-| 0-1 | **Never build automatic or periodic sending** — no heartbeat, poll-and-report, cron, sending hook. A command the agent runs once is fine; a wait for *receiving* (`watch.mjs`) is fine | "Working on X" every N minutes is noise, and once built the user has to hunt it down themselves |
+| 0-1 | **Never build automatic or periodic sending** — no heartbeat, poll-and-report, cron, progress-on-a-timer. A command the agent runs once is fine; a wait for *receiving* (`watch.mjs`) is fine; **one** sending hook is fine, `ask-hook.mjs`, because a question is the agent stopping dead, not progress | "Working on X" every N minutes is noise, and once built the user has to hunt it down themselves |
 | 0-2 | **Never put the token in a repository.** It lives in `~/.claude/local/telegram.env` only | Committed is stolen |
 | 0-3 | **Never print a token or chat id verbatim.** Use the masked output | It survives in transcripts and screenshots |
 | 0-4 | **Read it as the user before sending.** No progress narration, no self-reporting | See "When to send" |
@@ -82,6 +82,12 @@ answered. Reading and acting are separate: leave what you cannot act on unconsum
 `stop-hook.mjs` on `Stop` reads the inbox at every turn end, sends the report in mode 3, and on
 new mail returns `decision: block` so the turn continues and answers. `session-start.mjs` on
 `SessionStart` prints what is waiting, plus the watcher instruction when that is on.
+`ask-hook.mjs` on `PreToolUse` matching `AskUserQuestion` sends the question the agent is about
+to ask. In the terminal the prompt is in front of the user; in the VS Code extension it is a
+panel that can be scrolled away, closed, or lost with the session - and then the agent waits on
+an answer nobody saw. It only notifies: it prints nothing, so the tool runs unchanged and the
+answer still comes from the UI. The message numbers the options, including the `Other` the tool
+always adds.
 `node <s>/install.mjs --json` carries the exact hook block; any failure prints nothing and exits 0.
 
 ### Several sessions, one bot — numbers

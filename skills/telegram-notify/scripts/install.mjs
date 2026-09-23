@@ -66,6 +66,7 @@ export function permissionRules(scripts = SCRIPTS) {
 export const hookBlock = (scripts = SCRIPTS) => ({
     Stop: [{ hooks: [{ type: 'command', command: `node "${scripts}/stop-hook.mjs"`, timeout: 30, statusMessage: 'Telegram: checking inbox' }] }],
     SessionStart: [{ hooks: [{ type: 'command', command: `node "${scripts}/session-start.mjs"`, timeout: 20 }] }],
+    PreToolUse: [{ matcher: 'AskUserQuestion', hooks: [{ type: 'command', command: `node "${scripts}/ask-hook.mjs"`, timeout: 20, statusMessage: 'Telegram: sending the question' }] }],
 });
 
 /** What is true right now, step by step. */
@@ -80,6 +81,7 @@ export function status() {
         mode: mode().id,
         hooks: !!st?.hooks?.Stop,
         sessionStart: JSON.stringify(st?.hooks?.SessionStart || '').includes('session-start.mjs'),
+        askHook: JSON.stringify(st?.hooks?.PreToolUse || '').includes('ask-hook.mjs'),
         watcher: getKey('TG_WATCH') === '1',
         // The session map reads "open / closed" off the harness's transcript files, which is an
         // internal the harness never promised. This is how a change to it shows up as one line
@@ -116,6 +118,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
             ? 'watcher on - every new session arms one from the SessionStart hook'
             : 'watcher on but no SessionStart hook to say so. AGENT: merge install.mjs --json hookBlock')
         : 'watcher off - sessions arm it by hand (watch.mjs --on to change)'));
+    console.log(step(s.askHook, '3d', s.askHook
+        ? 'question hook wired - a question the agent asks is sent to the phone too'
+        : 'no PreToolUse hook for AskUserQuestion. AGENT: merge install.mjs --json hookBlock'));
     console.log(step(s.transcripts, '3c', s.transcripts
         ? 'session map can see this session - transcripts are where route.mjs expects them'
         : 'no transcript found for this directory. Fine if no agent has run here yet; otherwise the '
