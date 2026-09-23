@@ -27,13 +27,16 @@ test('the question, its options, and the Other the tool always adds', () => {
     assert.match(out, /3\. Other \(type your own\)/);
 });
 
-test('it says the answer is given in the editor, not by replying', () => {
-    assert.match(formatAsk(one), /answer in the editor/i);
+test('it says where to answer, and that replying here still works', () => {
+    const out = formatAsk(one);
+    assert.match(out, /Answer in the editor/i);
+    // The editor prompt is not always reachable - say the reply is slower, not lost.
+    assert.match(out, /Reply here with the number/i);
 });
 
 test('the frame follows the language the user reads; the question itself is left alone', () => {
     const ko = formatAsk(one, 'ko');
-    assert.match(ko, /편집기에서 골라 주세요/);
+    assert.match(ko, /편집기에서 고르면 바로 반영/);
     assert.match(ko, /기타 \(직접 입력\)/);
     // The agent wrote the question and the labels; translating those is not this script's job.
     assert.match(ko, /Which licence should this ship under\?/);
@@ -57,8 +60,10 @@ test('several questions stay apart', () => {
 
 test('a long description is clipped rather than sent whole', () => {
     const out = formatAsk({ questions: [{ question: 'q', options: [{ label: 'l', description: 'x'.repeat(400) }] }] });
-    assert.ok(out.length < 300, 'the description should not arrive at full length');
-    assert.match(out, /…/);
+    // The option's own line is what must be short; the frame around it is a fixed cost.
+    const line = out.split('\n').find(l => l.includes('1. l'));
+    assert.ok(line.length < 160, `the option line should be clipped, got ${line.length}`);
+    assert.match(line, /…$/);
 });
 
 test('nothing to ask means nothing to send', () => {

@@ -30,8 +30,21 @@ const DESC = 110;
  * a fact about the person reading, not about the project.
  */
 const STRINGS = {
-    en: { lead: 'Waiting on you — answer in the editor:', many: ' (pick any number)', other: 'Other (type your own)' },
-    ko: { lead: '답변 대기 중 — 편집기에서 골라 주세요:', many: ' (여러 개 선택 가능)', other: '기타 (직접 입력)' },
+    en: {
+        lead: 'Waiting on you:',
+        many: ' (pick any number)',
+        other: 'Other (type your own)',
+        how: 'Answer in the editor and it applies at once. Cannot reach it? Reply here with the '
+            + 'number - that is read when the editor prompt is closed or the turn ends, so it is '
+            + 'slower, not lost.',
+    },
+    ko: {
+        lead: '답변 대기 중:',
+        many: ' (여러 개 선택 가능)',
+        other: '기타 (직접 입력)',
+        how: '편집기에서 고르면 바로 반영됩니다. 편집기를 못 쓰면 여기로 번호만 답해 주세요 — '
+            + '편집기 쪽 질문을 닫거나 턴이 끝날 때 읽히니, 느릴 뿐 사라지지는 않습니다.',
+    },
 };
 
 const clip = (s, n) => {
@@ -68,7 +81,7 @@ export function formatAsk(input, lang = 'en') {
         if (options.length) lines.push(`  ${options.length + 1}. ${s.other}`);
         return lines.join('\n');
     });
-    return `${s.lead}\n\n` + blocks.join('\n\n');
+    return `${s.lead}\n\n` + blocks.join('\n\n') + `\n\n${s.how}`;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
