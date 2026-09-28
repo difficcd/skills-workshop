@@ -81,6 +81,15 @@ export function untaggedRefusal(tag, env = process.env) {
 }
 
 export async function send(text, creds = credentials()) {
+    // TG_DRY prints what would go and sends nothing. For testing the hooks: the only way to
+    // check a stop report used to be to let one arrive, which means testing by ringing the
+    // user's phone. Two of the duplicates they reported were exactly that.
+    if (process.env.TG_DRY) {
+        process.stderr.write(`[dry] would send to ${String(creds.chat).slice(0, 4)}...:
+${text}
+`);
+        return { ok: true, status: 0, body: '{"dry":true}', dry: true };
+    }
     const res = await fetch(`https://api.telegram.org/bot${creds.token}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

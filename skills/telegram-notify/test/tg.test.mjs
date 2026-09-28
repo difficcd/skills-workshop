@@ -36,3 +36,20 @@ test('a tagged send goes', () => {
 test('TG_UNTAGGED=1 sends anonymous on purpose', () => {
     assert.equal(untaggedRefusal('', { TG_UNTAGGED: '1' }), null);
 });
+
+// --- testing a send without making one ---------------------------------------------------------
+//
+// The only way to check a stop report used to be to let one arrive, which means testing by
+// ringing the user's phone. Two of the duplicate reports they complained about were exactly
+// that: the hook run twice by hand, not a bug in it.
+
+test('TG_DRY: nothing is sent, and the caller still sees a success', async () => {
+    const tg = await import('../scripts/tg.mjs');
+    process.env.TG_DRY = '1';
+    try {
+        // A token that would fail loudly if it were ever used.
+        const r = await tg.send('hello', { token: 'not-a-token', chat: '123456789' });
+        assert.equal(r.ok, true, 'a dry send must not look like a failure');
+        assert.equal(r.dry, true, 'and must be distinguishable from a real one');
+    } finally { delete process.env.TG_DRY; }
+});

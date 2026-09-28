@@ -25,6 +25,17 @@ incidents that produced it: **[references/design.md](references/design.md)**.
 | 0-8 | **Arm the watcher at the start of every session** (modes 2–3), before anything else, and re-arm it whenever it dies — a Monitor expiring, a session restart. Without it nothing reaches the session until it next stops | The user is then talking to something that cannot hear them. `stop-hook.mjs` checks the watcher's heartbeat and blocks once to re-arm it, so this no longer depends on the agent noticing |
 | 0-7 | **Going idle is a send.** When the queue is empty and you are about to stop, one line: that you are pausing, that a message resumes you, and what is left on *their* side (tests to run, a decision to make) | "Why did you go quiet" — a session that stops without saying so reads as dead, and the user's own to-dos stay unread in scrollback |
 
+## Testing a hook without ringing their phone
+
+`TG_DRY=1` makes `send()` print what would go and send nothing:
+
+```
+echo '{}' | TG_DRY=1 node <s>/stop-hook.mjs
+```
+
+Use it for every check of the stop report. Testing by letting a real one arrive is how three of
+the "it came twice" complaints were caused — by the person testing, not by the hook.
+
 ## Mode — ask once, then obey it
 
 `node <s>/mode.mjs` shows it; `mode.mjs 1|2|3` sets it. `TG_MODE=3` overrides one command.
