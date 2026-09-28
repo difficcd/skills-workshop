@@ -33,8 +33,6 @@ const out = (o) => { process.stdout.write(JSON.stringify(o)); process.exit(0); }
 
 /** Where watch.mjs lives, for the line that tells the agent to arm it again. */
 const WATCH = new URL('./watch.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
-/** Said in the report itself, so the user learns it even if the agent never acts. */
-const WATCHER_NOTE = '⚠ watcher down - messages will only arrive when this session stops';
 
 async function main() {
     const [tg, { inbox, mine }, { mode, canSend }, report, route] = await Promise.all([
@@ -84,18 +82,21 @@ async function main() {
     // different commit, a different number of uncommitted files. Two turns of conversation that
     // changed nothing send once, not twice; a turn that landed something always sends.
     //
-    // The three exceptions send regardless, because each one is news in itself: messages
-    // arrived, the watcher is down, or this project has just been given a number.
-    const ctx = report.context();
-    const print = `${ctx.branch}|${ctx.commit}|${ctx.dirty}`;
-    const moved = typeof route.changedSince === 'function' ? route.changedSince(print) : true;
-    if (moved || msgs.length || watcherDown || me.fresh) {
-        const text = report.format({
-            stopped: !msgs.length,
-            now: msgs.length ? 'reading what you just sent' : '',
-            note: msgs.length ? '' : (watcherDown ? WATCHER_NOTE : undefined),
-        }, ctx);
-        try { await tg.send(text, creds); } catch { }
+    // And a report goes with a real stop, never with a block. Blocking sends the agent back to
+    // work, so it will stop again in a moment and report then - reporting here too is how one
+    // interaction produced two messages: "reading what you just sent", then the actual result.
+    // Only the second is worth having.
+    // The change mark is deliberately left alone while blocking. Consuming it here would record
+    // the work as already reported, and the stop that follows a moment later - the one the user
+    // actually sees - would find nothing changed and say nothing.
+    const blocking = msgs.length > 0 || watcherDown;
+    if (!blocking) {
+        const ctx = report.context();
+        const print = `${ctx.branch}|${ctx.commit}|${ctx.dirty}`;
+        const moved = typeof route.changedSince === 'function' ? route.changedSince(print) : true;
+        if (moved || me.fresh) {
+            try { await tg.send(report.format({ stopped: true }, ctx), creds); } catch { }
+        }
     }
 
     // A dead watcher is worth a turn: without one, nothing reaches the session until it next
