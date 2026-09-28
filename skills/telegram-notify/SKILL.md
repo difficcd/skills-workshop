@@ -21,7 +21,7 @@ incidents that produced it: **[references/design.md](references/design.md)**.
 | 0-3 | **Never print a token or chat id verbatim.** Use the masked output | It survives in transcripts and screenshots |
 | 0-4 | **Read it as the user before sending.** No progress narration, no self-reporting | See "When to send" |
 | 0-5 | If the user says stop, **kill the processes too** — deleting a script does not stop a shell that already read it. `pkill -f 'sendMessage\|tg_heartbeat\|tg_poll'`, then check cron / Task Scheduler / harness background tasks | Messages kept arriving for hours after the files were gone |
-| 0-6 | **Every stop sends** (modes 2–3), whatever the turn was. `stop-hook.mjs` does it, so it does not depend on the agent remembering. This used to fire in mode 3 only, on the reasoning that mode 2 had a terminal to read — true when they are at it, worthless when they are not, which is the case this skill exists for | From the outside a silent stop is indistinguishable from a crash. It happened twice before the rule was tightened |
+| 0-6 | **A stop sends when the work moved** (modes 2–3) — a different branch, commit or dirty count since the last report; plus always when messages arrived or the watcher is down. `stop-hook.mjs` decides, so it does not depend on the agent remembering. It used to fire in mode 3 only, on the reasoning that mode 2 had a terminal to read — true when they are at it, worthless when they are not. Reporting *every* turn was the other extreme and was called overhead within the hour |
 | 0-8 | **Arm the watcher at the start of every session** (modes 2–3), before anything else, and re-arm it whenever it dies — a Monitor expiring, a session restart. Without it nothing reaches the session until it next stops | The user is then talking to something that cannot hear them. `stop-hook.mjs` checks the watcher's heartbeat and blocks once to re-arm it, so this no longer depends on the agent noticing |
 | 0-7 | **Going idle is a send.** When the queue is empty and you are about to stop, one line: that you are pausing, that a message resumes you, and what is left on *their* side (tests to run, a decision to make) | "Why did you go quiet" — a session that stops without saying so reads as dead, and the user's own to-dos stay unread in scrollback |
 
@@ -36,9 +36,10 @@ incidents that produced it: **[references/design.md](references/design.md)**.
 | 3 | **terse** (a few lines, no long summaries) | everything | away — the message *is* the report |
 
 In mode 1 `tg.mjs` / `report.mjs` print what would have gone and exit 0. **In modes 2 and 3 a
-stop is a send** (P0-6): finished, blocked, waiting, or "I will carry on next turn". The stop
-hook sends it whether or not the agent thought to, so the rule now describes what happens rather
-than what to remember.
+stop is a send** (P0-6) — but only when the work moved, so a run of conversational turns stays
+quiet and a turn that landed something always reports. The stop hook decides and sends, so the
+rule describes what happens rather than what to remember. A stop report opens with ⏹ and says
+the session is waiting; that is the difference between "finished" and "crashed".
 
 ## When to send — three occasions, no others
 

@@ -73,17 +73,30 @@ async function main() {
         try { await tg.send(route.formatMap(), creds); } catch { }
     }
 
-    // Every stop reports, in every sending mode. This used to fire only in mode 3, on the
-    // reasoning that in mode 2 the terminal had already told them - true when they are at the
-    // terminal, and worthless when they are not, which is the case the whole skill exists for.
-    // From the outside a silent stop is indistinguishable from a crash, and it happened twice
-    // before this was changed. The cost is one short message per turn end; the report is four
-    // lines and carries the branch and commit, so a run of them still reads as progress.
-    const text = report.format({
-        now: msgs.length ? 'reading what you just sent' : '',
-        note: msgs.length ? '' : (watcherDown ? WATCHER_NOTE : undefined),
-    });
-    try { await tg.send(text, creds); } catch { }
+    // A stop reports in every sending mode, not mode 3 alone. The old reasoning was that mode 2
+    // has a terminal and a message would duplicate it - true while they are at the terminal, and
+    // worthless when they are not, which is the case this skill exists for. A silent stop is
+    // indistinguishable from a crash from the outside.
+    //
+    // But the hook fires at the end of *every* turn, including the ones where they are sitting
+    // there typing the next message, and reporting all of those is the noise P0-1 exists to
+    // prevent. So the report goes out when the work actually moved: a different branch, a
+    // different commit, a different number of uncommitted files. Two turns of conversation that
+    // changed nothing send once, not twice; a turn that landed something always sends.
+    //
+    // The three exceptions send regardless, because each one is news in itself: messages
+    // arrived, the watcher is down, or this project has just been given a number.
+    const ctx = report.context();
+    const print = `${ctx.branch}|${ctx.commit}|${ctx.dirty}`;
+    const moved = typeof route.changedSince === 'function' ? route.changedSince(print) : true;
+    if (moved || msgs.length || watcherDown || me.fresh) {
+        const text = report.format({
+            stopped: !msgs.length,
+            now: msgs.length ? 'reading what you just sent' : '',
+            note: msgs.length ? '' : (watcherDown ? WATCHER_NOTE : undefined),
+        }, ctx);
+        try { await tg.send(text, creds); } catch { }
+    }
 
     // A dead watcher is worth a turn: without one, nothing reaches the session until it next
     // stops, so the user is talking to something that cannot hear them until it pauses.

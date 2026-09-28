@@ -44,8 +44,8 @@ const git = (...args) => {
  * use because `context` takes it as a default argument, and a const is not hoisted.
  */
 export const LABELS = {
-    ko: { now: '지금', done: '직전', next: '다음', blocked: '막힘', uncommitted: '미커밋', unit: { m: '분', h: '시간', d: '일' }, ago: (n, u) => `${n}${u} 전`, just: '방금' },
-    en: { now: 'now', done: 'done', next: 'next', blocked: 'blocked', uncommitted: 'uncommitted', unit: { m: 'm', h: 'h', d: 'd' }, ago: (n, u) => `${n}${u} ago`, just: 'just now' },
+    ko: { now: '지금', done: '직전', next: '다음', blocked: '막힘', uncommitted: '미커밋', unit: { m: '분', h: '시간', d: '일' }, ago: (n, u) => `${n}${u} 전`, just: '방금', stopped: '멈춤', resume: '답장하면 이어서 합니다.' },
+    en: { now: 'now', done: 'done', next: 'next', blocked: 'blocked', uncommitted: 'uncommitted', unit: { m: 'm', h: 'h', d: 'd' }, ago: (n, u) => `${n}${u} ago`, just: 'just now', stopped: 'stopped', resume: 'Reply and it carries on.' },
 };
 
 export const lang = () => (String(process.env.TG_LANG || 'ko').toLowerCase().startsWith('en') ? 'en' : 'ko');
@@ -81,14 +81,19 @@ const clock = (d = new Date()) => `${String(d.getHours()).padStart(2, '0')}:${St
  * Kept to a handful of lines on purpose: this is read on a lock screen. A line is omitted rather
  * than printed empty, so what is there is always information.
  */
-export function format({ now, done, next, blocked, note }, ctx = context(), at = new Date(), L = LABELS[lang()]) {
+export function format({ now, done, next, blocked, note, stopped }, ctx = context(), at = new Date(), L = LABELS[lang()]) {
     // The one glyph that changes: a blocked report has to be distinguishable at a glance, from
     // the notification preview alone, without opening anything.
     //
     // The mode is in the header because the reader cannot otherwise tell which one is in force,
     // and it changes what this message means: in mode 3 it is the whole account of the work, in
     // mode 2 it is a summary of something also on screen. Mode 1 never sends, so it never shows.
-    const head = `${blocked ? '🔴' : '🟢'} ${ctx.project || 'session'} · m${mode().id} · ${clock(at)}`;
+    // A stop says so in the first three characters. The old header opened with a green dot and
+    // the mode, which reads as a status ping - the user could not tell from it whether the
+    // session had finished or was still going, which is the one thing a stop report is for.
+    const head = stopped
+        ? `⏹ ${L.stopped} · ${ctx.project || 'session'} · ${clock(at)}`
+        : `${blocked ? '🔴' : '🟢'} ${ctx.project || 'session'} · m${mode().id} · ${clock(at)}`;
     const lines = [head];
     if (now) lines.push(`${L.now}: ${now}`);
     if (done) lines.push(`${L.done}: ${done}`);
@@ -103,6 +108,8 @@ export function format({ now, done, next, blocked, note }, ctx = context(), at =
         ctx.dirty ? `${L.uncommitted} ${ctx.dirty}` : '',
     ].filter(Boolean).join(' · ');
     if (state) lines.push(state);
+    // Only on a stop: the reader has to know the session is waiting, not mid-thought.
+    if (stopped) lines.push(L.resume);
     return lines.join('\n');
 }
 

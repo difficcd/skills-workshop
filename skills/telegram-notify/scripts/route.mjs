@@ -77,6 +77,36 @@ export const projectKey = (dir = process.cwd()) => fold(dir);
 export const projectName = (dir = process.cwd()) => path.basename(dir) || dir;
 
 /**
+ * The last stop report's fingerprint, one file per project.
+ *
+ * A stop hook fires at the end of every turn, including the ones where the user is sitting at
+ * the terminal typing the next message. Reporting all of them is the noise P0-1 exists to
+ * prevent - "don't report so often, it's overhead" was the first thing said about it.
+ *
+ * So a report goes out when the work actually moved. Two turns that changed no branch, no
+ * commit and no file produce one report, not two; a turn that landed something produces one.
+ * That is also what makes the message worth reading: it always means something happened.
+ */
+const seenFile = (dir = process.cwd()) => path.join(DIR, `report-${projectKey(dir)}.json`);
+
+/**
+ * Has anything changed since the last report? Records `print` as the new mark when it has.
+ *
+ * Returns true the first time it is ever asked for a project, so a fresh checkout reports once
+ * rather than staying silent until its first commit.
+ */
+export function changedSince(print, dir = process.cwd()) {
+    let last = null;
+    try { last = JSON.parse(fs.readFileSync(seenFile(dir), 'utf8')).print; } catch { }
+    if (last === print) return false;
+    try {
+        fs.mkdirSync(DIR, { recursive: true });
+        fs.writeFileSync(seenFile(dir), JSON.stringify({ print, at: Date.now() }));
+    } catch { }
+    return true;
+}
+
+/**
  * Where a running watcher leaves a note that it is alive, one file per project.
  *
  * The stop hook cannot see the agent's background tasks, so it has no other way to tell whether
