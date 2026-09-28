@@ -384,37 +384,3 @@ test('watching: a note naming a process that is gone does not count', () => {
         JSON.stringify({ pid: 999999, at: Date.now() }));
     assert.equal(route.watching(dir), false);
 });
-
-// --- reporting only when the work moved --------------------------------------------------------
-//
-// The stop hook fires at the end of every turn, including the ones where the user is typing the
-// next message. "Don't report so often, it's overhead" was the first thing said about reporting
-// on every stop, so a report now waits for something to have changed.
-
-test('changedSince: the first ask for a project always counts as changed', () => {
-    // A fresh checkout should report once rather than stay silent until its first commit.
-    assert.equal(route.changedSince('main|abc|0', aProject()), true);
-});
-
-test('changedSince: the same fingerprint twice is not a change', () => {
-    const dir = aProject();
-    assert.equal(route.changedSince('main|abc|0', dir), true);
-    assert.equal(route.changedSince('main|abc|0', dir), false);
-    assert.equal(route.changedSince('main|abc|0', dir), false);
-});
-
-test('changedSince: a new commit, a new branch or a new dirty count all count', () => {
-    const dir = aProject();
-    route.changedSince('main|abc|0', dir);
-    assert.equal(route.changedSince('main|def|0', dir), true, 'commit moved');
-    assert.equal(route.changedSince('side|def|0', dir), true, 'branch moved');
-    assert.equal(route.changedSince('side|def|3', dir), true, 'files changed');
-    assert.equal(route.changedSince('side|def|3', dir), false, 'and then settled');
-});
-
-test('changedSince: projects are tracked apart', () => {
-    const a = aProject(), b = aProject();
-    route.changedSince('main|abc|0', a);
-    assert.equal(route.changedSince('main|abc|0', b), true, 'b has never been asked');
-    assert.equal(route.changedSince('main|abc|0', a), false, 'a is unchanged');
-});

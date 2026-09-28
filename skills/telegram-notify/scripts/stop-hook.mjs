@@ -76,27 +76,18 @@ async function main() {
     // worthless when they are not, which is the case this skill exists for. A silent stop is
     // indistinguishable from a crash from the outside.
     //
-    // But the hook fires at the end of *every* turn, including the ones where they are sitting
-    // there typing the next message, and reporting all of those is the noise P0-1 exists to
-    // prevent. So the report goes out when the work actually moved: a different branch, a
-    // different commit, a different number of uncommitted files. Two turns of conversation that
-    // changed nothing send once, not twice; a turn that landed something always sends.
+    // One message per stop, and never on a block. Blocking sends the agent back to work, so it
+    // stops again a moment later and reports then; reporting on both is how one exchange
+    // produced two messages.
     //
-    // And a report goes with a real stop, never with a block. Blocking sends the agent back to
-    // work, so it will stop again in a moment and report then - reporting here too is how one
-    // interaction produced two messages: "reading what you just sent", then the actual result.
-    // Only the second is worth having.
-    // The change mark is deliberately left alone while blocking. Consuming it here would record
-    // the work as already reported, and the stop that follows a moment later - the one the user
-    // actually sees - would find nothing changed and say nothing.
-    const blocking = msgs.length > 0 || watcherDown;
-    if (!blocking) {
-        const ctx = report.context();
-        const print = `${ctx.branch}|${ctx.commit}|${ctx.dirty}`;
-        const moved = typeof route.changedSince === 'function' ? route.changedSince(print) : true;
-        if (moved || me.fresh) {
-            try { await tg.send(report.format({ stopped: true }, ctx), creds); } catch { }
-        }
+    // It is deliberately not conditional on anything else. A gate on "did the work move" - a
+    // different branch, commit or dirty count - was tried and was wrong twice over. It is read
+    // from the hook's own working directory, so a turn spent in another repository looks like a
+    // turn spent idle and says nothing; and plenty of real work moves no files at all. The
+    // result was silence exactly when a report was wanted, which is the failure this hook exists
+    // to prevent. The double was the block, not the frequency, and the block is handled above.
+    if (!msgs.length && !watcherDown) {
+        try { await tg.send(report.format({ stopped: true }), creds); } catch { }
     }
 
     // A dead watcher is worth a turn: without one, nothing reaches the session until it next
