@@ -31,6 +31,11 @@ import { pathToFileURL } from 'node:url';
 
 const out = (o) => { process.stdout.write(JSON.stringify(o)); process.exit(0); };
 
+/** Where watch.mjs lives, for the line that tells the agent to arm it again. */
+const WATCH = new URL('./watch.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+/** Said in the report itself, so the user learns it even if the agent never acts. */
+const WATCHER_NOTE = '⚠ watcher down - messages will only arrive when this session stops';
+
 async function main() {
     const [tg, { inbox, mine }, { mode, canSend }, report, route] = await Promise.all([
         import('./tg.mjs'), import('./tg-read.mjs'), import('./mode.mjs'), import('./report.mjs'),
@@ -57,6 +62,8 @@ async function main() {
     }
 
     let msgs = route.spoolTake(me.n);
+    // Read once, before anything can send: the report says so, and the block below acts on it.
+    const watcherDown = typeof route.watching === 'function' ? !route.watching() : false;
 
     // `?` is answered here rather than handed to the agent: it is a question about the wiring,
     // not about the work, and waking a session to answer it would cost a turn.
@@ -66,12 +73,28 @@ async function main() {
         try { await tg.send(route.formatMap(), creds); } catch { }
     }
 
-    if (mode().id === 3) {
-        const text = report.format({
-            now: msgs.length ? 'reading what you just sent' : '',
-            note: msgs.length ? '' : undefined,
+    // Every stop reports, in every sending mode. This used to fire only in mode 3, on the
+    // reasoning that in mode 2 the terminal had already told them - true when they are at the
+    // terminal, and worthless when they are not, which is the case the whole skill exists for.
+    // From the outside a silent stop is indistinguishable from a crash, and it happened twice
+    // before this was changed. The cost is one short message per turn end; the report is four
+    // lines and carries the branch and commit, so a run of them still reads as progress.
+    const text = report.format({
+        now: msgs.length ? 'reading what you just sent' : '',
+        note: msgs.length ? '' : (watcherDown ? WATCHER_NOTE : undefined),
+    });
+    try { await tg.send(text, creds); } catch { }
+
+    // A dead watcher is worth a turn: without one, nothing reaches the session until it next
+    // stops, so the user is talking to something that cannot hear them until it pauses.
+    if (!msgs.length && watcherDown) {
+        out({
+            decision: 'block',
+            reason: 'The Telegram watcher is not running for this project, so messages only arrive '
+                + 'when you stop. Arm it now, and say nothing else about it:\n\n'
+                + `Monitor({ command: 'node "${WATCH}"', description: 'Telegram messages for this session', persistent: true })`,
+            systemMessage: 'Telegram: the watcher is down; re-arming',
         });
-        try { await tg.send(text, creds); } catch { }
     }
 
     if (!msgs.length) out({ suppressOutput: true });

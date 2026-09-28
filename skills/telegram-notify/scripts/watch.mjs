@@ -53,7 +53,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { credentials, send } from './tg.mjs';
 import { canSend, getKey, setKey } from './mode.mjs';
 import { inbox, mine } from './tg-read.mjs';
-import { register, spoolAdd, spoolTake, isMapRequest, formatMap, list, tagged } from './route.mjs';
+import { register, spoolAdd, spoolTake, isMapRequest, formatMap, list, tagged, beat, beatStop } from './route.mjs';
 
 const KEY = 'TG_WATCH';       // '1' when every session should arm a watcher at start
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -136,11 +136,21 @@ async function main() {
     const me = register();
     log(`watching as session ${me.n}`);
 
+    // Leave a note that someone is listening, refreshed while this runs. The stop hook reads it:
+    // it cannot see the agent's background tasks, so without this a killed watcher goes unnoticed
+    // until the user asks why their messages went nowhere.
+    beat();
+    const beating = setInterval(beat, 30000);
+    const stopBeating = () => { clearInterval(beating); beatStop(); };
+    for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { stopBeating(); process.exit(0); });
+    process.on('exit', stopBeating);
+
     for (;;) {
-        if (!parentAlive()) { log('session is gone; stopping'); return; }
+        beat();
+        if (!parentAlive()) { log('session is gone; stopping'); stopBeating(); return; }
 
         // This session's share first - whoever fetched it.
-        if (await deliver(spoolTake(me.n), creds) && once) return;
+        if (await deliver(spoolTake(me.n), creds) && once) { stopBeating(); return; }
 
         let r;
         try { r = await inbox(creds, undefined, WAIT_SEC); }
@@ -154,7 +164,7 @@ async function main() {
             log('another watcher holds the poll; reading the spool meanwhile');
             for (let waited = 0; waited < YIELD_MS; waited += PEEK_MS) {
                 await sleep(PEEK_MS);
-                if (!parentAlive()) { log('session is gone; stopping'); return; }
+                if (!parentAlive()) { log('session is gone; stopping'); stopBeating(); return; }
                 if (await deliver(spoolTake(me.n), creds) && once) return;
             }
             continue;

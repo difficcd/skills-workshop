@@ -77,6 +77,46 @@ export const projectKey = (dir = process.cwd()) => fold(dir);
 export const projectName = (dir = process.cwd()) => path.basename(dir) || dir;
 
 /**
+ * Where a running watcher leaves a note that it is alive, one file per project.
+ *
+ * The stop hook cannot see the agent's background tasks, so it has no other way to tell whether
+ * anyone is actually listening. Without this the watcher can be killed - a session restart, a
+ * Monitor timing out - and nothing notices until the user asks why their messages went nowhere,
+ * which is exactly how it was found.
+ */
+const beatFile = (dir = process.cwd()) => path.join(DIR, `watch-${projectKey(dir)}.json`);
+
+/** Say the watcher for this project is alive. Called on a timer while it runs. */
+export function beat(dir = process.cwd()) {
+    try {
+        fs.mkdirSync(DIR, { recursive: true });
+        fs.writeFileSync(beatFile(dir), JSON.stringify({ pid: process.pid, at: Date.now() }));
+    } catch { }
+}
+
+/** Forget it, on a clean exit, so the next check does not wait for the note to go stale. */
+export function beatStop(dir = process.cwd()) {
+    try { fs.unlinkSync(beatFile(dir)); } catch { }
+}
+
+/**
+ * Is a watcher listening for this project?
+ *
+ * Stale after `maxAgeMs` so a killed watcher stops counting: nothing removes the file when the
+ * process dies, only when it exits cleanly. The window is generous compared with the beat
+ * interval, because a slow machine must not read as a dead watcher.
+ */
+export function watching(dir = process.cwd(), maxAgeMs = 180000) {
+    try {
+        const b = JSON.parse(fs.readFileSync(beatFile(dir), 'utf8'));
+        if (!b || typeof b.at !== 'number' || Date.now() - b.at > maxAgeMs) return false;
+        // The note may outlive the process on a hard kill; ask the OS as well.
+        try { process.kill(b.pid, 0); } catch { return false; }
+        return true;
+    } catch { return false; }
+}
+
+/**
  * This project's number, assigning one if it has not been seen before.
  *
  * @param {string} [dir]

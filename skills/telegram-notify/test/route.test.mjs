@@ -335,3 +335,52 @@ test('a reply opens with the session number and name, and an unregistered direct
     assert.equal(route.tagged('done', ''), 'done');
     assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(DIR, 'tg-sessions.json'), 'utf8')).byKey).length, 1);
 });
+
+// --- is anyone listening? ---------------------------------------------------------------------
+//
+// The stop hook cannot see the agent's background tasks, so a killed watcher went unnoticed
+// until the user asked why their messages went nowhere. It happened twice. These cover the note
+// a running watcher leaves and the three ways it stops counting.
+//
+// The note is keyed by a fold of the project path, so a distinct string is a distinct project -
+// the directory itself never has to exist.
+let nth = 0;
+const aProject = () => `/tmp/watch-probe-${++nth}`;
+
+test('watching: false with no note at all', () => {
+    assert.equal(route.watching(aProject()), false);
+});
+
+test('watching: true right after a beat, false once it is stopped', () => {
+    const dir = aProject();
+    route.beat(dir);
+    assert.equal(route.watching(dir), true);
+    route.beatStop(dir);
+    assert.equal(route.watching(dir), false);
+});
+
+test('watching: a note older than the window does not count', () => {
+    // Nothing removes the file when the process is killed, only when it exits cleanly - so age
+    // is the only signal for a watcher that died hard.
+    const dir = aProject();
+    route.beat(dir);
+    assert.equal(route.watching(dir, 0), false, 'a zero window makes even a fresh note stale');
+    assert.equal(route.watching(dir, 180000), true, 'and the real window still accepts it');
+});
+
+test('watching: junk in the note reads as nobody listening, not as a crash', () => {
+    const dir = aProject();
+    route.beat(dir);
+    fs.writeFileSync(path.join(DIR, `watch-${route.projectKey(dir)}.json`), 'not json');
+    assert.equal(route.watching(dir), false);
+});
+
+test('watching: a note naming a process that is gone does not count', () => {
+    // A hard kill leaves the file behind. The timestamp may still be fresh, so the pid is asked
+    // about as well.
+    const dir = aProject();
+    route.beat(dir);
+    fs.writeFileSync(path.join(DIR, `watch-${route.projectKey(dir)}.json`),
+        JSON.stringify({ pid: 999999, at: Date.now() }));
+    assert.equal(route.watching(dir), false);
+});
