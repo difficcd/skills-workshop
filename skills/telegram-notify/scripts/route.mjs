@@ -135,7 +135,7 @@ export function register(dir = process.cwd()) {
     // Refreshed every time: a renamed folder should show under its new name.
     reg.names[key] = projectName(dir);
     writeJson(SESSIONS, reg);
-    return { n: reg.byKey[key], fresh, list: listOf(reg) };
+    return { n: reg.byKey[key], key, fresh, list: listOf(reg) };
 }
 
 /**
