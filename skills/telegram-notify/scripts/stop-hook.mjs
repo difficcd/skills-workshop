@@ -28,17 +28,32 @@
 // notifier must never be able to trap a session.
 
 import { pathToFileURL } from 'node:url';
+import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 
 const out = (o) => { process.stdout.write(JSON.stringify(o)); process.exit(0); };
 
 /** Where watch.mjs lives, for the line that tells the agent to arm it again. */
 const WATCH = new URL('./watch.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+/** The detached waiter that decides whether a stop was really a stop. */
+const WAITER = new URL('./quiet-send.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+
+/** The hook's JSON on stdin. Empty when there is none - nothing here is required. */
+async function hookInput() {
+    try {
+        if (process.stdin.isTTY) return {};
+        const chunks = [];
+        for await (const c of process.stdin) chunks.push(c);
+        return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+    } catch { return {}; }
+}
 
 async function main() {
     const [tg, { inbox, mine }, { mode, canSend }, report, route] = await Promise.all([
         import('./tg.mjs'), import('./tg-read.mjs'), import('./mode.mjs'), import('./report.mjs'),
         import('./route.mjs'),
     ]);
+    const quiet = await import('./quiet.mjs');
     const { credentials } = tg;
 
     const creds = credentials();
@@ -87,7 +102,27 @@ async function main() {
     // result was silence exactly when a report was wanted, which is the failure this hook exists
     // to prevent. The double was the block, not the frequency, and the block is handled above.
     if (!msgs.length && !watcherDown) {
-        try { await tg.send(report.format({ stopped: true }), creds); } catch { }
+        // Deferred, not sent. The Stop hook runs every time the agent hands control back, and a
+        // background Monitor or task waking the session seconds later makes that a yield rather
+        // than a stop - one stretch of work reported itself three times. quiet.mjs explains the
+        // test; the short version is that the waiter sends only if no newer stop has replaced
+        // this marker and the transcript has not grown.
+        const input = await hookInput();
+        const transcript = input.transcript_path || null;
+        quiet.writeMarker(me.key, {
+            token: randomUUID(),
+            at: Date.now(),
+            transcript,
+            size: quiet.transcriptSize(transcript),
+        });
+        try {
+            spawn(process.execPath, [WAITER, me.key], { detached: true, stdio: 'ignore' }).unref();
+        } catch {
+            // No waiter means no report at all, and a silent stop is the thing this hook exists
+            // to prevent. Fall back to sending now and accept the occasional duplicate.
+            quiet.clearMarker(me.key);
+            try { await tg.send(report.format({ stopped: true }), creds); } catch { }
+        }
     }
 
     // A dead watcher is worth a turn: without one, nothing reaches the session until it next
