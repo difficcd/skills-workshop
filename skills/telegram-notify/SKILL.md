@@ -51,14 +51,21 @@ stop is a send** (P0-6): one message per stop, none on a block. The stop hook do
 rule describes what happens rather than what to remember. A stop report opens with ⏹ and says
 the session is waiting; that is the difference between "finished" and "crashed".
 
-## When to send — three occasions, no others
+## When to send — two occasions, no others
 
-1. **The user asked** — briefing, update, ping
-2. **Work stops** — finished, blocked, waiting on an answer. The one worth most
-   — and **idle** counts: nothing left to do is a stop too (P0-7). `잠시 멈춥니다 — 메시지 주시면 이어감` plus their side of the list.
-3. **You judge it worth it** — rarely: a long job finished, something hard to undo happened
+1. **The user asked** — briefing, update, ping, a question you are blocked on
+2. **You judge it worth it** — rarely: something hard to undo happened, or a result they would
+   act on before you next stop
 
-Test: *would they have acted differently had they known while away?* If not, write it to the terminal.
+**Stopping is not one of them.** `stop-hook.mjs` already sends one short line on every real stop,
+so a summary written by hand arrives alongside it and the user gets two messages per turn, one of
+them long. That is what "you send too often" meant, and it was not the hook.
+
+So: finish the work, say it in the terminal, and stop. The hook says you stopped. Write the
+account of what happened where they can read it at leisure — the commit, the PR, the issue —
+not in a notification.
+
+Test: *would they have acted differently had they known while away?* If not, it is not a message.
 
 ## How to send
 
