@@ -362,10 +362,17 @@ test('watching: true right after a beat, false once it is stopped', () => {
 test('watching: a note older than the window does not count', () => {
     // Nothing removes the file when the process is killed, only when it exits cleanly - so age
     // is the only signal for a watcher that died hard.
+    //
+    // The note is written old rather than the window being shrunk to nothing. Passing 0 was a
+    // race: on a fast machine beat() and watching() land in the same millisecond, so the note
+    // is 0ms old, and `0 > 0` is false - it read as alive. It passed here and went red on CI,
+    // which is the worst way for a test to be wrong.
     const dir = aProject();
+    const note = path.join(DIR, `watch-${route.projectKey(dir)}.json`);
+    fs.writeFileSync(note, JSON.stringify({ pid: process.pid, at: Date.now() - 10 * 60 * 1000 }));
+    assert.equal(route.watching(dir), false, 'ten minutes old is past the three-minute window');
     route.beat(dir);
-    assert.equal(route.watching(dir, 0), false, 'a zero window makes even a fresh note stale');
-    assert.equal(route.watching(dir, 180000), true, 'and the real window still accepts it');
+    assert.equal(route.watching(dir), true, 'and a fresh note counts again');
 });
 
 test('watching: junk in the note reads as nobody listening, not as a crash', () => {
