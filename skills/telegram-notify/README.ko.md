@@ -142,6 +142,22 @@ node <s>/mode.mjs 2      # 설정
 모드 1에서는 `tg.mjs` 와 `report.mjs` 가 **보낼 내용을 출력만 하고 끝난다.** 잃는 것도 없고
 울리지도 않는다.
 
+### 제거 — 훅을 영구 차단
+
+모든 세션에서 telegram-notify 훅이 아예 안 돌게 하려면:
+
+```bash
+node <s>/uninstall.mjs              # 훅 제거, 권한 제거, 모드 1 설정
+node <s>/uninstall.mjs --dry-run    # 바뀔 내용만 보기
+node <s>/uninstall.mjs --json       # 기계용 출력
+```
+
+`~/.claude/settings.json` 에서 `telegram-notify` 를 참조하는 `Stop`, `SessionStart`,
+`PreToolUse` 훅과 이 스킬이 등록한 권한 규칙을 지우고 모드를 1로 바꾼다.
+`ask-first` 등 다른 훅은 건드리지 않는다.
+
+스킬 폴더는 그대로 남는다 — 나중에 다시 쓰려면 `node install.mjs` 로 복원.
+
 ---
 
 ## 읽기 — 봇은 뒤에서 듣고 있지 않다
@@ -427,6 +443,7 @@ skills/telegram-notify/
 │   └── reachability.md       # 세션이 끝난 뒤에도 닿기 — 후보 4개와 기준
 ├── scripts/                  # Node 18+, 의존성 없음
 │   ├── install.mjs           # 여기서 시작 — 체크리스트 + 권한 블록
+│   ├── uninstall.mjs         # 훅·권한 전부 제거, 모드 1 설정
 │   ├── tg-setup.mjs          # 봇 연동 · --check
 │   ├── tg.mjs                # 임의 메시지 전송
 │   ├── report.mjs            # 고정 형식 상태 보고 (절반은 기계가 채운다)

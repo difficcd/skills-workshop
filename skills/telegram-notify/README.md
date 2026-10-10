@@ -146,6 +146,23 @@ node <s>/mode.mjs 2      # set it
 In mode 1, `tg.mjs` and `report.mjs` **print what they would have sent and exit.** Nothing is
 lost, nothing rings.
 
+### Uninstall — remove all hooks permanently
+
+To stop every telegram-notify hook from firing across all sessions:
+
+```bash
+node <s>/uninstall.mjs              # remove hooks, permissions, set mode 1
+node <s>/uninstall.mjs --dry-run    # show what would change, touch nothing
+node <s>/uninstall.mjs --json       # machine-readable
+```
+
+This removes the `Stop`, `SessionStart` and `PreToolUse` hooks that reference
+`telegram-notify` from `~/.claude/settings.json`, drops the permission rules the skill
+registered, and sets mode 1. Other hooks (like `ask-first`) are left alone.
+
+The skill folder stays in place — to re-enable later, run `node install.mjs` and follow its
+checklist.
+
 ---
 
 ## Read — the bot is not listening in the background
@@ -443,6 +460,7 @@ skills/telegram-notify/
 │   └── reachability.md       # reaching the machine after the session ends — four candidates and the criteria
 ├── scripts/                  # Node 18+, no dependencies
 │   ├── install.mjs           # start here — checklist + the permission block
+│   ├── uninstall.mjs         # remove all hooks and permissions, set mode 1
 │   ├── tg-setup.mjs          # link a bot · --check
 │   ├── tg.mjs                # send free text
 │   ├── report.mjs            # the fixed-format status report (a machine fills half)
