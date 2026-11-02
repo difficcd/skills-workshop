@@ -81,7 +81,8 @@ from the project directory (or set `TG_SESSION_DIR`); an unregistered directory 
 temp worktree - is **refused** (exit 3) rather than sent anonymous. `TG_UNTAGGED=1` sends anyway, on purpose.
 
 `report.mjs` appends a machine-written line — clock, branch, last commit and its age, uncommitted
-count — so two reports side by side show whether anything moved, whatever the prose says. Field
+count — so two reports side by side show whether anything moved, whatever the prose says. Text
+with no flag becomes the note; a report with nothing written at all is refused (exit 4). Field
 rules: [references/reporting.md](references/reporting.md). Both print `200` on success; with no
 credentials they print the setup command and exit `2`.
 

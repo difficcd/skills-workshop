@@ -13,9 +13,11 @@
 //   node report.mjs --now "writing tests" --done "retry logic" --next "refactor checkout"
 //   node report.mjs --blocked "signing key password needed"
 //   node report.mjs --now "building" --dry        # print, do not send
+//   node report.mjs "free text"                   # same as --note "free text"
 //
-// Every field is optional. With none, it still sends the machine-read half, which is enough to
-// tell a live session from a stopped one.
+// Every field is optional, but at least one must say something. A report that is only the
+// machine-read half reaches the phone as a green dot and "24시간 전" - the user called those
+// meaningless and asked for them to stop, so the script refuses to send one.
 
 import { execFileSync } from 'node:child_process';
 import { basename } from 'node:path';
@@ -23,11 +25,33 @@ import { credentials, send, untaggedRefusal } from './tg.mjs';
 import { mode, canSend } from './mode.mjs';
 import { tagged, sessionTag } from './route.mjs';
 
-const flag = (name) => {
-    const i = process.argv.indexOf(`--${name}`);
-    return i >= 0 && process.argv[i + 1] && !process.argv[i + 1].startsWith('--') ? process.argv[i + 1] : '';
-};
-const has = (name) => process.argv.includes(`--${name}`);
+const FIELDS = ['now', 'done', 'next', 'blocked', 'note'];
+
+/**
+ * The agent-written half of the report, read from argv.
+ *
+ * Text with no flag in front of it used to be dropped without a word: `report.mjs "done X"` sent
+ * an empty report and exited 200, so every report of a session went out blank and nothing said
+ * so. Bare text now joins the note, which is what whoever typed it meant.
+ */
+export function readArgs(argv) {
+    const out = Object.fromEntries(FIELDS.map((f) => [f, '']));
+    const loose = [];
+    let dry = false;
+    for (let i = 0; i < argv.length; i++) {
+        const a = argv[i];
+        if (a === '--dry') { dry = true; continue; }
+        const name = a.startsWith('--') ? a.slice(2) : '';
+        if (FIELDS.includes(name)) {
+            const v = argv[i + 1];
+            if (v !== undefined && !v.startsWith('--')) { out[name] = v; i++; }
+            continue;
+        }
+        loose.push(a);
+    }
+    out.note = [out.note, ...loose].filter(Boolean).join('\n');
+    return { fields: out, dry, empty: FIELDS.every((f) => !out[f].trim()) };
+}
 
 /** Never let a missing git, or a directory that is not a repo, turn a report into a crash. */
 const git = (...args) => {
@@ -114,15 +138,15 @@ export function format({ now, done, next, blocked, note, stopped }, ctx = contex
 }
 
 if (process.argv[1] && import.meta.url === (await import('node:url')).pathToFileURL(process.argv[1]).href) {
-    const text = format({
-        now: flag('now'),
-        done: flag('done'),
-        next: flag('next'),
-        blocked: flag('blocked'),
-        note: flag('note'),
-    });
+    const { fields, dry, empty } = readArgs(process.argv.slice(2));
+    if (empty) {
+        console.error('nothing to report: give at least one of --now --done --next --blocked --note.');
+        console.error('a report with only the clock and branch tells the reader nothing.');
+        process.exit(4);
+    }
+    const text = format(fields);
 
-    if (has('dry')) { console.log(text); process.exit(0); }
+    if (dry) { console.log(text); process.exit(0); }
 
     // Same rule as tg.mjs: mode 1 prints instead of sending. The report is still built, so the
     // machine-read line is in the terminal too and the agent has not skipped the discipline.
